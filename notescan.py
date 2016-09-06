@@ -3,9 +3,6 @@
 # for some reason pylint complains about members being undefined :(
 # pylint: disable=E1101
 
-# TODO: global palette
-# TODO: no auto-sort numerically
-
 import sys
 import os
 import re
@@ -132,16 +129,35 @@ def nearest(pixels, centers):
 
 ######################################################################
 
-def crush(output_filename, crush_filename):
+def detect_pngcrush():
+
+    try:
+        result = subprocess.call(['pngcrush', '-q'])
+    except OSError:
+        result = -1
+
+    if result != 0:
+        print 'warning: no working pngcrush found!'
+        return False
+    else:
+        return True
+
+def crush(output_filename):
+
+    base, _ = os.path.splitext(output_filename)
+    crush_filename = base + '_crush.png'
 
     spargs = ['pngcrush', '-q',
               output_filename,
               crush_filename]
 
-    print '  pngcrush -> {}...'.format(output_filename),
+    print '  pngcrush -> {}...'.format(crush_filename),
     sys.stdout.flush()
 
-    result = subprocess.call(spargs)
+    try:
+        result = subprocess.call(spargs)
+    except OSError:
+        result = -1
 
     if result == 0:
 
@@ -150,12 +166,12 @@ def crush(output_filename, crush_filename):
 
         print '{:.1f}% reduction'.format(100*(1.0-float(after)/before))
 
-        return True
+        return crush_filename
 
     else:
 
         print 'warning: pngcrush failed!'
-        return False
+        return None
 
 ######################################################################
 
@@ -200,20 +216,34 @@ def parse_args():
                         type=percent, default='5',
                         help='%% of pixels to sample' + show_default)
 
+    parser.add_argument('-w', dest='white_bg', action='store_true',
+                        default=False, help='make background white')
+
+    parser.add_argument('-g', dest='global_palette',
+                        action='store_true', default=False,
+                        help='use one global palette for all pages')
+
     parser.add_argument('-C', dest='crush', action='store_false',
                         default=True, help='do not run pngcrush')
 
     parser.add_argument('-S', dest='saturate', action='store_false',
                         default=True, help='do not saturate colors')
 
-    parser.add_argument('-w', dest='white_bg', action='store_true',
-                        default=False, help='make background white')
+    parser.add_argument('-K', dest='sort_numerically',
+                        action='store_false', default=True,
+                        help='keep filenames ordered as specified; '
+                        'use if you *really* want IMG_10.png to '
+                        'precede IMG_2.png')
+
 
     return parser.parse_args()
 
 ######################################################################
 
 def get_filenames(options):
+
+    if not options.sort_numerically:
+        return options.filenames
 
     filenames = []
 
@@ -226,8 +256,6 @@ def get_filenames(options):
         else:
             num = -1
         filenames.append((num, filename))
-
-    del options.filenames
 
     return [fn for (_, fn) in sorted(filenames)]
 
@@ -337,17 +365,54 @@ def save(output_filename, labels, palette, dpi, options):
 
 ######################################################################
 
-def notescan_main():
+def get_global_palette(filenames, options):
 
-    options = parse_args()
+    input_filenames = []
+
+    all_samples = []
+
+    print 'building global palette...'
+
+    for input_filename in filenames:
+
+        try:
+            img, _ = load(input_filename)
+        except IOError:
+            print 'warning: error opening ' + input_filename
+            continue
+
+        print '  processing {}...'.format(input_filename)
+
+        samples = sample_pixels(img, options)
+        input_filenames.append(input_filename)
+        all_samples.append(samples)
+
+    num_inputs = len(input_filenames)
+
+    all_samples = [s[:int(round(float(s.shape[0])/num_inputs))]
+                   for s in all_samples]
+
+    all_samples = np.vstack(tuple(all_samples))
+
+    global_palette = get_palette(all_samples, options)
+
+    print '  done\n'
+
+    return input_filenames, global_palette
+
+######################################################################
+
+def notescan(options):
 
     filenames = get_filenames(options)
 
     outputs = []
 
-    do_pngcrush = options.crush
-    if do_pngcrush and subprocess.call(['pngcrush', '-q']) != 0:
-        print 'warning: no working pngcrush found!'
+    do_pngcrush = options.crush and detect_pngcrush()
+    do_global = options.global_palette and len(filenames) > 1
+
+    if do_global:
+        filenames, palette = get_global_palette(filenames, options)
 
     for input_filename in filenames:
 
@@ -357,22 +422,22 @@ def notescan_main():
             print 'warning: error opening ' + input_filename
             continue
 
-        output_basename = '{}{:04d}'.format(options.basename, len(outputs))
-        output_filename = output_basename + '.png'
-        crush_filename = output_basename + '_crush.png'
+        output_filename = '{}{:04d}.png'.format(
+            options.basename, len(outputs))
 
         print 'opened', input_filename
 
-        samples = sample_pixels(img, options)
-
-        palette = get_palette(samples, options)
+        if not do_global:
+            samples = sample_pixels(img, options)
+            palette = get_palette(samples, options)
 
         labels = apply_palette(img, palette, options)
 
         save(output_filename, labels, palette, dpi, options)
 
         if do_pngcrush:
-            if crush(output_filename, crush_filename):
+            crush_filename = crush(output_filename)
+            if crush_filename:
                 output_filename = crush_filename
             else:
                 do_pngcrush = False
@@ -382,6 +447,13 @@ def notescan_main():
 
     if subprocess.call(['convert'] + outputs + [options.pdfname]) == 0:
         print 'wrote', options.pdfname
+
+######################################################################
+
+def notescan_main():
+
+    options = parse_args()
+    notescan(options)
 
 ######################################################################
 
