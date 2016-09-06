@@ -19,26 +19,35 @@ def quantize(image, bits_per_channel=None):
         
     assert image.dtype == np.uint8
 
-    shift_right = 8-bits_per_channel
-    halfbin = 1 << (shift_right - 1)
+    shift = 8-bits_per_channel
+    halfbin = 1 << (shift - 1)
     
-    return (((image.astype(int) + halfbin) >> shift_right)
-            << shift_right) + halfbin
+    return (((image.astype(int) + halfbin) >> shift)
+            << shift) + halfbin
 
 ######################################################################
 
 def pack_rgb(rgb):
-    
-    assert rgb.shape[-1] == 3
-    orig_shape = rgb.shape[:-1]
-    
-    rgb = rgb.astype(int).reshape((-1, 3))
 
+    orig_shape = None
+
+    if isinstance(rgb, np.ndarray):
+        assert rgb.shape[-1] == 3
+        orig_shape = rgb.shape[:-1]
+    else:
+        assert len(rgb) == 3
+        rgb = np.array(rgb)
+
+    rgb = rgb.astype(int).reshape((-1, 3))
+        
     packed = (rgb[:,0] |
               rgb[:,1] << 8 |
               rgb[:,2] << 16)
-    
-    return packed.reshape(orig_shape)
+
+    if orig_shape is None:
+        return packed
+    else:
+        return packed.reshape(orig_shape)
 
 ######################################################################
 
@@ -62,7 +71,7 @@ def unpack_rgb(packed):
 
 ######################################################################
     
-def get_mode(image, bits_per_channel=None):
+def get_bg_color(image, bits_per_channel=None):
 
     assert image.shape[-1] == 3
         
@@ -75,8 +84,9 @@ def get_mode(image, bits_per_channel=None):
 
     return unpack_rgb(packed_mode)
 
+######################################################################
 
-def SV(rgb):
+def rgb_to_sv(rgb):
 
     if not isinstance(rgb, np.ndarray):
         rgb = np.array(rgb)
@@ -150,12 +160,12 @@ def smoosh(pil_img, output_filename, options):
 
     downsampled = img[::ds_factor, ::ds_factor]
 
-    bg_color = get_mode(downsampled, 6)
+    bg_color = get_bg_color(downsampled, 6)
     print '  got background color', bg_color
 
-    bgS, bgV = SV(bg_color)
+    bgS, bgV = rgb_to_sv(bg_color)
     
-    imgS, imgV = SV(img)
+    imgS, imgV = rgb_to_sv(img)
 
     S_diff = np.abs(imgS - bgS)
     V_diff = np.abs(imgV - bgV)
