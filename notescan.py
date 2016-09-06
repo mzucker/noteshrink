@@ -142,6 +142,8 @@ def detect_pngcrush():
     else:
         return True
 
+######################################################################
+
 def crush(output_filename):
 
     base, _ = os.path.splitext(output_filename)
@@ -234,7 +236,6 @@ def parse_args():
                         help='keep filenames ordered as specified; '
                         'use if you *really* want IMG_10.png to '
                         'precede IMG_2.png')
-
 
     return parser.parse_args()
 
