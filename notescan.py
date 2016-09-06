@@ -116,8 +116,10 @@ def nearest(pixels, centers):
     assert(centers.shape[1] == m)
     
     dists = np.empty((n, k), dtype=pixels.dtype)
+    
     for i in range(k):
-        dists[:, i] = ((pixels - centers[i].reshape((1,m)))**2).sum(axis=1)
+        di = pixels - centers[i].reshape((1,m))
+        dists[:, i] = (di**2).sum(axis=1)
 
     return dists.argmin(axis=1)
 
@@ -144,70 +146,34 @@ def encode(bg_color, fg_pixels, options):
 
 ######################################################################
 
-def smoosh(pil_img, output_filename, options):
+def crush(output_filename, crush_filename):
 
-    if pil_img.info.has_key('dpi'):
-        dpi_x, dpi_y = pil_img.info['dpi']
-    else:
-        dpi_x, dpi_y = 300, 300
+    spargs = ['pngcrush', '-q',
+              output_filename,
+              crush_filename]
 
-    if pil_img.mode != 'RGB':
-        pil_img = pil_img.convert('RGB')
+    result = subprocess.call(spargs)
 
-    img = np.array(pil_img)
+    if result == 0:
 
-    ds_factor = 4
-
-    downsampled = img[::ds_factor, ::ds_factor]
-
-    bg_color = get_bg_color(downsampled, 6)
-    print '  got background color', bg_color
-
-    bgS, bgV = rgb_to_sv(bg_color)
-    
-    imgS, imgV = rgb_to_sv(img)
-
-    S_diff = np.abs(imgS - bgS)
-    V_diff = np.abs(imgV - bgV)
-
-    bg = ((V_diff < options.value_threshold) &
-          (S_diff < options.sat_threshold))
-
-    print '  quantizing...'
-
-
-    labels, palette = encode(bg_color, img[~bg], options)
-
-    biglabels = np.zeros(img.shape[:2], dtype=np.uint8)
-    biglabels[~bg] = labels.flatten()
-
-    if options.saturate:
-        palette = palette.astype(np.float32)
-        pmin = palette.min()
-        pmax = palette.max()
-        palette = 255 * (palette - pmin)/(pmax-pmin)
-
-    if options.white_bg:
-        palette[0] = (255,255,255)
+        before = os.stat(output_filename)
+        after = os.stat(crush_filename)
         
-    palette = palette.astype(np.uint8)
+        return True, before.st_size, after.st_size
 
-    output_img = Image.fromarray(biglabels, 'P')
-    output_img.putpalette(palette.flatten())
-    
-    output_img.save(output_filename, dpi=(dpi_x, dpi_y))
-
-    print '  wrote', output_filename
-
+    else:
+        
+        return False, -1, -1
+        
 ######################################################################
 
 def percent(string):
     return float(string)/100.0
 
-######################################################################    
+######################################################################
 
-def notescan_main():
-    
+def parse_args():
+
     parser = ArgumentParser(
         description='convert scanned, hand-written notes to PDF')
 
@@ -220,7 +186,7 @@ def notescan_main():
                         default='output_page_',
                         help='output PNG filename base' + show_default)
 
-    parser.add_argument('-p', dest='pdfname', metavar='PDF',
+    parser.add_argument('-o', dest='pdfname', metavar='PDF',
                         default='output.pdf',
                         help='output PDF filename' + show_default)
 
@@ -237,11 +203,10 @@ def notescan_main():
                         default='8',
                         help='number of output colors '+show_default)
 
-    parser.add_argument('-q', dest='quantize_fraction',
+    parser.add_argument('-p', dest='sample_fraction',
                         metavar='PERCENT',
                         type=percent, default='5',
-                        help='%% of pixels to keep for '
-                        'quantizing' + show_default)
+                        help='%% of pixels to sample' + show_default)
 
     parser.add_argument('-C', dest='crush', action='store_false',
                         default=True, help='do not run pngcrush')
@@ -252,7 +217,11 @@ def notescan_main():
     parser.add_argument('-w', dest='white_bg', action='store_true',
                         default=False, help='make background white')
     
-    options = parser.parse_args()
+    return parser.parse_args()
+
+######################################################################
+
+def get_filenames(options):
 
     filenames = []
 
@@ -266,15 +235,119 @@ def notescan_main():
             num = -1
         filenames.append((num, filename))
 
-    filenames.sort()
-    filenames = [fn for (_, fn) in filenames]
+    del options.filenames
 
-    page_count = 0
+    return [fn for (_, fn) in sorted(filenames)]
+        
+######################################################################    
+
+def from_pil(pil_img):
+
+    if pil_img.mode != 'RGB':
+        pil_img = pil_img.convert('RGB')
+
+    if pil_img.info.has_key('dpi'):
+        dpi = pil_img.info['dpi']
+    else:
+        dpi = (300, 300)
+
+    img = np.array(pil_img)
+
+    return img, dpi
+
+######################################################################
+
+def sample_pixels(img, options):
+
+    pixels = img.reshape((-1, 3))
+    num_pixels = pixels.shape[0]
+    num_samples = int(num_pixels*options.sample_fraction)
+    
+    idx = np.arange(num_pixels)
+    np.random.shuffle(idx)
+
+    return pixels[idx[:num_samples]]
+
+######################################################################
+
+def get_bg_mask(bg_color, samples, options):
+
+    s_bg, v_bg = rgb_to_sv(bg_color)
+    s_samples, v_samples = rgb_to_sv(samples)
+
+    s_diff = np.abs(s_bg - s_samples)
+    v_diff = np.abs(v_bg - v_samples)
+
+    return ((v_diff < options.value_threshold) &
+            (s_diff < options.sat_threshold))
+
+######################################################################
+
+def get_palette(samples, options):
+
+    bg_color = get_bg_color(samples, 6)
+
+    bg_mask = get_bg_mask(bg_color, samples, options)
+    
+    centers, _ = scipy.cluster.vq.kmeans(samples[~bg_mask].astype(np.float32),
+                                         options.num_colors-1,
+                                         iter=40)
+
+    return np.vstack((bg_color, centers)).astype(np.uint8)
+
+######################################################################
+
+def apply_palette(img, palette, options):
+
+    bg_color = palette[0]
+    
+    bg_mask = get_bg_mask(bg_color, img, options)
+
+    orig_shape = img.shape
+
+    pixels = img.reshape((-1, 3))
+    bg_mask = bg_mask.flatten()
+    
+    num_pixels = pixels.shape[0]
+
+    labels = np.zeros(num_pixels, dtype=np.uint8)
+
+    labels[~bg_mask] = nearest(pixels[~bg_mask], palette)
+
+    return labels.reshape(orig_shape[:-1])
+
+######################################################################
+
+def save_pil(output_filename, labels, palette, dpi, options):
+
+    if options.saturate:
+        palette = palette.astype(np.float32)
+        pmin = palette.min()
+        pmax = palette.max()
+        palette = 255 * (palette - pmin)/(pmax-pmin)
+        palette = palette.astype(np.uint8)
+
+    if options.white_bg:
+        palette = palette.copy()
+        palette[0] = (255,255,255)
+
+    output_img = Image.fromarray(labels, 'P')
+    output_img.putpalette(palette.flatten())
+    output_img.save(output_filename, dpi=dpi)
+
+######################################################################
+
+def notescan_main():
+
+    options = parse_args()
+
+    filenames = get_filenames(options)
 
     outputs = []
 
-    have_pngcrush = (options.crush and
-                     subprocess.call(['pngcrush', '-q']) == 0)
+    do_pngcrush = options.crush
+    if do_pngcrush and subprocess.call(['pngcrush', '-q']) != 0:
+        print 'warning: no working pngcrush found!'
     
     for input_filename in filenames:
 
@@ -284,45 +357,44 @@ def notescan_main():
             print 'warning: error opening ' + input_filename
             continue
             
-        output_basename = '{}{:04d}'.format(options.basename, page_count)
+        output_basename = '{}{:04d}'.format(options.basename, len(outputs))
         output_filename = output_basename + '.png'
         crush_filename = output_basename + '_crush.png'
 
         print 'opened', input_filename
 
-        smoosh(pil_img, output_filename, options)
+        img, dpi = from_pil(pil_img)
 
-        if have_pngcrush:
-            result = subprocess.call(['pngcrush', '-q',
-                                      output_filename,
-                                      crush_filename])
-        else:
-            result = -1
-            
-        if result == 0:
-            outputs.append(crush_filename)
-            before = os.stat(output_filename)
-            after = os.stat(crush_filename)
-            fraction = 100.0*(1-float(after.st_size)/before.st_size)
-            print '  pngcrush -> {} ({:.1f}% reduction)'.format(
-                crush_filename, fraction)
-        else:
-            outputs.append(output_filename)
-            if have_pngcrush:
-                print '  warning: pngcrush failed'
-                have_pngcrush = False
+        samples = sample_pixels(img, options)
 
+        print '  getting palette...'
+        palette = get_palette(samples, options)
 
-        print
-        page_count += 1
+        print '  applying palette...'
+        labels = apply_palette(img, palette, options)
 
+        print '  saving {}...'.format(output_filename)
+        save_pil(output_filename, labels, palette, dpi, options)
+
+        if do_pngcrush:
+            print '  pngcrush -> {}...'.format(output_filename),
+            sys.stdout.flush()
+            ok, before, after = crush(output_filename, crush_filename)
+            if ok:
+                print '{:.1f}% reduction'.format(100*(1.0-float(after)/before))
+                output_filename = crush_filename
+            else:
+                print '  warning: pngcrush failed!'
+                do_pngcrush = False
+
+        outputs.append(output_filename)
+        print '  done\n'
     
     pargs = ['convert'] + outputs + [options.pdfname]
     
     if subprocess.call(pargs) == 0:
         print 'wrote', options.pdfname
     
-
 if __name__ == '__main__':
     
     notescan_main()
