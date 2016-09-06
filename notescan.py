@@ -4,11 +4,11 @@ import sys
 import os
 import re
 import subprocess
-import cv2
 from argparse import ArgumentParser
+
 import numpy as np
 from PIL import Image
-import scipy.cluster.vq
+from scipy.cluster.vq import kmeans
 
 ######################################################################
 
@@ -289,9 +289,9 @@ def get_palette(samples, options):
 
     bg_mask = get_bg_mask(bg_color, samples, options)
     
-    centers, _ = scipy.cluster.vq.kmeans(samples[~bg_mask].astype(np.float32),
-                                         options.num_colors-1,
-                                         iter=40)
+    centers, _ = kmeans(samples[~bg_mask].astype(np.float32),
+                        options.num_colors-1,
+                        iter=40)
 
     return np.vstack((bg_color, centers)).astype(np.uint8)
 
