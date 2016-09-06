@@ -173,14 +173,14 @@ def detect_pngcrush():
         result = -1
 
     if result != 0:
-        print 'warning: no working pngcrush found!'
+        sys.stderr.write('warning: no working pngcrush found!\n')
         return False
     else:
         return True
 
 ######################################################################
 
-def crush(output_filename):
+def crush(output_filename, options):
 
     '''Runs pngcrush on the file provided.'''
 
@@ -191,8 +191,9 @@ def crush(output_filename):
               output_filename,
               crush_filename]
 
-    print '  pngcrush -> {}...'.format(crush_filename),
-    sys.stdout.flush()
+    if not options.quiet:
+        print '  pngcrush -> {}...'.format(crush_filename),
+        sys.stdout.flush()
 
     try:
         result = subprocess.call(spargs)
@@ -204,13 +205,15 @@ def crush(output_filename):
         before = os.stat(output_filename).st_size
         after = os.stat(crush_filename).st_size
 
-        print '{:.1f}% reduction'.format(100*(1.0-float(after)/before))
+        if not options.quiet:
+            print '{:.1f}% reduction'.format(
+                100*(1.0-float(after)/before))
 
         return crush_filename
 
     else:
 
-        print 'warning: pngcrush failed!'
+        sys.stderr.write('warning: pngcrush failed!\n')
         return None
 
 ######################################################################
@@ -232,6 +235,10 @@ def parse_args():
 
     parser.add_argument('filenames', metavar='IMAGE', nargs='+',
                         help='files to convert')
+
+    parser.add_argument('-q', dest='quiet', action='store_true',
+                        default=False,
+                        help='reduce program output')
 
     parser.add_argument('-b', dest='basename', metavar='BASENAME',
                         default='output_page_',
@@ -317,7 +324,12 @@ def load(input_filename):
     '''Load an image with Pillow and convert it to numpy array. Also
 returns the image DPI in x and y as a tuple.'''
 
-    pil_img = Image.open(input_filename)
+    try:
+        pil_img = Image.open(input_filename)
+    except IOError:
+        sys.stderr.write('warning: error opening {}\n'.format(
+            input_filename))
+        return None, None
 
     if pil_img.mode != 'RGB':
         pil_img = pil_img.convert('RGB')
@@ -335,7 +347,8 @@ returns the image DPI in x and y as a tuple.'''
 
 def sample_pixels(img, options):
 
-    '''Pick a fixed percentage of pixels in the image, returned in random order.'''
+    '''Pick a fixed percentage of pixels in the image, returned in random
+order.'''
 
     pixels = img.reshape((-1, 3))
     num_pixels = pixels.shape[0]
@@ -374,7 +387,8 @@ from foreground pixels by running K-means clustering.
 
     '''
 
-    print '  getting palette...'
+    if not options.quiet:
+        print '  getting palette...'
 
     bg_color = get_bg_color(samples, 6)
 
@@ -397,7 +411,8 @@ the palette.
 
     '''
 
-    print '  applying palette...'
+    if not options.quiet:
+        print '  applying palette...'
 
     bg_color = palette[0]
 
@@ -427,7 +442,8 @@ the background color to pure white.
 
     '''
 
-    print '  saving {}...'.format(output_filename)
+    if not options.quiet:
+        print '  saving {}...'.format(output_filename)
 
     if options.saturate:
         palette = palette.astype(np.float32)
@@ -457,17 +473,17 @@ their samples together into one large array.
 
     all_samples = []
 
-    print 'building global palette...'
+    if not options.quiet:
+        print 'building global palette...'
 
     for input_filename in filenames:
 
-        try:
-            img, _ = load(input_filename)
-        except IOError:
-            print 'warning: error opening ' + input_filename
+        img, _ = load(input_filename)
+        if img is None:
             continue
 
-        print '  processing {}...'.format(input_filename)
+        if not options.quiet:
+            print '  processing {}...'.format(input_filename)
 
         samples = sample_pixels(img, options)
         input_filenames.append(input_filename)
@@ -482,7 +498,8 @@ their samples together into one large array.
 
     global_palette = get_palette(all_samples, options)
 
-    print '  done\n'
+    if not options.quiet:
+        print '  done\n'
 
     return input_filenames, global_palette
 
@@ -504,16 +521,15 @@ def notescan_main(options):
 
     for input_filename in filenames:
 
-        try:
-            img, dpi = load(input_filename)
-        except IOError:
-            print 'warning: error opening ' + input_filename
+        img, dpi = load(input_filename)
+        if img is None:
             continue
 
         output_filename = '{}{:04d}.png'.format(
             options.basename, len(outputs))
 
-        print 'opened', input_filename
+        if not options.quiet:
+            print 'opened', input_filename
 
         if not do_global:
             samples = sample_pixels(img, options)
@@ -524,17 +540,20 @@ def notescan_main(options):
         save(output_filename, labels, palette, dpi, options)
 
         if do_pngcrush:
-            crush_filename = crush(output_filename)
+            crush_filename = crush(output_filename, options)
             if crush_filename:
                 output_filename = crush_filename
             else:
                 do_pngcrush = False
 
         outputs.append(output_filename)
-        print '  done\n'
+
+        if not options.quiet:
+            print '  done\n'
 
     if subprocess.call(['convert'] + outputs + [options.pdfname]) == 0:
-        print 'wrote', options.pdfname
+        if not options.quiet:
+            print 'wrote', options.pdfname
 
 ######################################################################
 

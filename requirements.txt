@@ -1,0 +1,4 @@
+notescan
+numpy
+scipy
+Image
