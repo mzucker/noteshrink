@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+# for some reason pylint complains about members being undefined :(
+# pylint: disable=E1101
+
 import sys
 import os
 import re
@@ -13,15 +16,15 @@ from scipy.cluster.vq import kmeans
 ######################################################################
 
 def quantize(image, bits_per_channel=None):
-    
+
     if bits_per_channel is None:
         bits_per_channel = 6
-        
+
     assert image.dtype == np.uint8
 
     shift = 8-bits_per_channel
     halfbin = 1 << (shift - 1)
-    
+
     return (((image.astype(int) + halfbin) >> shift)
             << shift) + halfbin
 
@@ -39,10 +42,10 @@ def pack_rgb(rgb):
         rgb = np.array(rgb)
 
     rgb = rgb.astype(int).reshape((-1, 3))
-        
-    packed = (rgb[:,0] |
-              rgb[:,1] << 8 |
-              rgb[:,2] << 16)
+
+    packed = (rgb[:, 0] |
+              rgb[:, 1] << 8 |
+              rgb[:, 2] << 16)
 
     if orig_shape is None:
         return packed
@@ -56,7 +59,7 @@ def unpack_rgb(packed):
     orig_shape = None
 
     if isinstance(packed, np.ndarray):
-        assert(packed.dtype == int)
+        assert packed.dtype == int
         orig_shape = packed.shape
         packed = packed.reshape((-1, 1))
 
@@ -70,14 +73,14 @@ def unpack_rgb(packed):
         return np.hstack(rgb).reshape(orig_shape + (3,))
 
 ######################################################################
-    
+
 def get_bg_color(image, bits_per_channel=None):
 
     assert image.shape[-1] == 3
-        
+
     quantized = quantize(image, bits_per_channel).astype(int)
     packed = pack_rgb(quantized)
-              
+
     unique, counts = np.unique(packed, return_counts=True)
 
     packed_mode = unique[counts.argmax()]
@@ -92,16 +95,16 @@ def rgb_to_sv(rgb):
         rgb = np.array(rgb)
 
     axis = len(rgb.shape)-1
-    Cmax = rgb.max(axis=axis).astype(np.float32)
-    Cmin = rgb.min(axis=axis).astype(np.float32)
-    delta = Cmax - Cmin
+    cmax = rgb.max(axis=axis).astype(np.float32)
+    cmin = rgb.min(axis=axis).astype(np.float32)
+    delta = cmax - cmin
 
-    S = delta.astype(np.float32) / Cmax.astype(np.float32)
-    S = np.where(Cmax == 0, 0, S)
-                 
-    V = Cmax/255.0
+    saturation = delta.astype(np.float32) / cmax.astype(np.float32)
+    saturation = np.where(cmax == 0, 0, saturation)
 
-    return S, V
+    value = cmax/255.0
+
+    return saturation, value
 
 ######################################################################
 
@@ -109,34 +112,35 @@ def nearest(pixels, centers):
 
     pixels = pixels.astype(int)
     centers = centers.astype(int)
-    
-    n = pixels.shape[0]
-    m = pixels.shape[1]
-    k = centers.shape[0]
-    assert(centers.shape[1] == m)
-    
-    dists = np.empty((n, k), dtype=pixels.dtype)
-    
-    for i in range(k):
-        di = pixels - centers[i].reshape((1,m))
-        dists[:, i] = (di**2).sum(axis=1)
+
+    num_pixels = pixels.shape[0]
+    num_channels = pixels.shape[1]
+    num_centers = centers.shape[0]
+
+    assert centers.shape[1] == num_channels
+
+    dists = np.empty((num_pixels, num_centers), dtype=pixels.dtype)
+
+    for i in range(num_centers):
+        dists_i = pixels - centers[i].reshape((1, num_channels))
+        dists[:, i] = (dists_i**2).sum(axis=1)
 
     return dists.argmin(axis=1)
 
-######################################################################            
+######################################################################
 
 def encode(bg_color, fg_pixels, options):
 
     num_pixels = fg_pixels.shape[0]
     num_train = int(round(num_pixels*options.quantize_fraction))
-    
+
     idx = np.arange(num_pixels)
     np.random.shuffle(idx)
     train = fg_pixels[idx[:num_train]].astype(np.float32)
 
-    centers, _  = scipy.cluster.vq.kmeans(train,
-                                          options.num_colors-1,
-                                          iter=40)
+    centers, _ = kmeans(train,
+                        options.num_colors-1,
+                        iter=40)
 
     labels = nearest(fg_pixels, centers)
 
@@ -152,19 +156,25 @@ def crush(output_filename, crush_filename):
               output_filename,
               crush_filename]
 
+    print '  pngcrush -> {}...'.format(output_filename),
+    sys.stdout.flush()
+
     result = subprocess.call(spargs)
 
     if result == 0:
 
-        before = os.stat(output_filename)
-        after = os.stat(crush_filename)
-        
-        return True, before.st_size, after.st_size
+        before = os.stat(output_filename).st_size
+        after = os.stat(crush_filename).st_size
+
+        print '{:.1f}% reduction'.format(100*(1.0-float(after)/before))
+
+        return True
 
     else:
-        
-        return False, -1, -1
-        
+
+        print 'warning: pngcrush failed!'
+        return False
+
 ######################################################################
 
 def percent(string):
@@ -178,7 +188,7 @@ def parse_args():
         description='convert scanned, hand-written notes to PDF')
 
     show_default = ' (default %(default)s)'
-    
+
     parser.add_argument('filenames', metavar='IMAGE', nargs='+',
                         help='files to convert')
 
@@ -216,7 +226,7 @@ def parse_args():
 
     parser.add_argument('-w', dest='white_bg', action='store_true',
                         default=False, help='make background white')
-    
+
     return parser.parse_args()
 
 ######################################################################
@@ -228,9 +238,9 @@ def get_filenames(options):
     for filename in options.filenames:
         basename = os.path.basename(filename)
         root, _ = os.path.splitext(basename)
-        m = re.findall(r'[0-9]+', root)
-        if m:
-            num = int(m[-1])
+        matches = re.findall(r'[0-9]+', root)
+        if matches:
+            num = int(matches[-1])
         else:
             num = -1
         filenames.append((num, filename))
@@ -238,8 +248,8 @@ def get_filenames(options):
     del options.filenames
 
     return [fn for (_, fn) in sorted(filenames)]
-        
-######################################################################    
+
+######################################################################
 
 def from_pil(pil_img):
 
@@ -262,7 +272,7 @@ def sample_pixels(img, options):
     pixels = img.reshape((-1, 3))
     num_pixels = pixels.shape[0]
     num_samples = int(num_pixels*options.sample_fraction)
-    
+
     idx = np.arange(num_pixels)
     np.random.shuffle(idx)
 
@@ -285,10 +295,12 @@ def get_bg_mask(bg_color, samples, options):
 
 def get_palette(samples, options):
 
+    print '  getting palette...'
+
     bg_color = get_bg_color(samples, 6)
 
     bg_mask = get_bg_mask(bg_color, samples, options)
-    
+
     centers, _ = kmeans(samples[~bg_mask].astype(np.float32),
                         options.num_colors-1,
                         iter=40)
@@ -299,15 +311,17 @@ def get_palette(samples, options):
 
 def apply_palette(img, palette, options):
 
+    print '  applying palette...'
+
     bg_color = palette[0]
-    
+
     bg_mask = get_bg_mask(bg_color, img, options)
 
     orig_shape = img.shape
 
     pixels = img.reshape((-1, 3))
     bg_mask = bg_mask.flatten()
-    
+
     num_pixels = pixels.shape[0]
 
     labels = np.zeros(num_pixels, dtype=np.uint8)
@@ -320,6 +334,8 @@ def apply_palette(img, palette, options):
 
 def save_pil(output_filename, labels, palette, dpi, options):
 
+    print '  saving {}...'.format(output_filename)
+
     if options.saturate:
         palette = palette.astype(np.float32)
         pmin = palette.min()
@@ -329,7 +345,7 @@ def save_pil(output_filename, labels, palette, dpi, options):
 
     if options.white_bg:
         palette = palette.copy()
-        palette[0] = (255,255,255)
+        palette[0] = (255, 255, 255)
 
     output_img = Image.fromarray(labels, 'P')
     output_img.putpalette(palette.flatten())
@@ -348,7 +364,7 @@ def notescan_main():
     do_pngcrush = options.crush
     if do_pngcrush and subprocess.call(['pngcrush', '-q']) != 0:
         print 'warning: no working pngcrush found!'
-    
+
     for input_filename in filenames:
 
         try:
@@ -356,7 +372,7 @@ def notescan_main():
         except IOError:
             print 'warning: error opening ' + input_filename
             continue
-            
+
         output_basename = '{}{:04d}'.format(options.basename, len(outputs))
         output_filename = output_basename + '.png'
         crush_filename = output_basename + '_crush.png'
@@ -367,34 +383,24 @@ def notescan_main():
 
         samples = sample_pixels(img, options)
 
-        print '  getting palette...'
         palette = get_palette(samples, options)
 
-        print '  applying palette...'
         labels = apply_palette(img, palette, options)
 
-        print '  saving {}...'.format(output_filename)
         save_pil(output_filename, labels, palette, dpi, options)
 
         if do_pngcrush:
-            print '  pngcrush -> {}...'.format(output_filename),
-            sys.stdout.flush()
-            ok, before, after = crush(output_filename, crush_filename)
-            if ok:
-                print '{:.1f}% reduction'.format(100*(1.0-float(after)/before))
+            if crush(output_filename, crush_filename):
                 output_filename = crush_filename
             else:
-                print '  warning: pngcrush failed!'
                 do_pngcrush = False
 
         outputs.append(output_filename)
         print '  done\n'
-    
-    pargs = ['convert'] + outputs + [options.pdfname]
-    
-    if subprocess.call(pargs) == 0:
+
+    if subprocess.call(['convert'] + outputs + [options.pdfname]) == 0:
         print 'wrote', options.pdfname
-    
+
 if __name__ == '__main__':
-    
+
     notescan_main()
