@@ -3,6 +3,9 @@
 # for some reason pylint complains about members being undefined :(
 # pylint: disable=E1101
 
+# TODO: global palette
+# TODO: no auto-sort numerically
+
 import sys
 import os
 import re
