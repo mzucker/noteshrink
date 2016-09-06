@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+'''Converts sequence of images to compact PDF while removing speckles,
+bleedthrough, etc.
+
+'''
+
 # for some reason pylint complains about members being undefined :(
 # pylint: disable=E1101
 
@@ -17,6 +22,8 @@ from scipy.cluster.vq import kmeans
 
 def quantize(image, bits_per_channel=None):
 
+    '''Reduces the number of bits per channel in the given image.'''
+
     if bits_per_channel is None:
         bits_per_channel = 6
 
@@ -31,6 +38,9 @@ def quantize(image, bits_per_channel=None):
 ######################################################################
 
 def pack_rgb(rgb):
+
+    '''Packs a 24-bit RGB triples into a single integer,
+works on both arrays and tuples.'''
 
     orig_shape = None
 
@@ -56,6 +66,11 @@ def pack_rgb(rgb):
 
 def unpack_rgb(packed):
 
+    '''Unpacks a single integer or array of integers into one or more
+24-bit RGB values.
+
+    '''
+
     orig_shape = None
 
     if isinstance(packed, np.ndarray):
@@ -76,6 +91,12 @@ def unpack_rgb(packed):
 
 def get_bg_color(image, bits_per_channel=None):
 
+    '''Obtains the background color from an image or array of RGB colors
+by grouping similar colors into bins and finding the most frequent
+one.
+
+    '''
+
     assert image.shape[-1] == 3
 
     quantized = quantize(image, bits_per_channel).astype(int)
@@ -90,6 +111,12 @@ def get_bg_color(image, bits_per_channel=None):
 ######################################################################
 
 def rgb_to_sv(rgb):
+
+    '''Convert an RGB image or array of RGB colors to saturation and
+value, returning each one as a separate 32-bit floating point array or
+value.
+
+    '''
 
     if not isinstance(rgb, np.ndarray):
         rgb = np.array(rgb)
@@ -109,6 +136,13 @@ def rgb_to_sv(rgb):
 ######################################################################
 
 def nearest(pixels, centers):
+
+    '''Maps each pixel in an image to the nearest color in the centers
+array provided. For small numbers of centers, this brute-force nearest
+neighbor finder is faster than using a KDTree from scipy's spatial
+data structures.
+
+    '''
 
     pixels = pixels.astype(int)
     centers = centers.astype(int)
@@ -131,6 +165,8 @@ def nearest(pixels, centers):
 
 def detect_pngcrush():
 
+    '''Detect whether the external pngcrush program is available.'''
+
     try:
         result = subprocess.call(['pngcrush', '-q'])
     except OSError:
@@ -145,6 +181,8 @@ def detect_pngcrush():
 ######################################################################
 
 def crush(output_filename):
+
+    '''Runs pngcrush on the file provided.'''
 
     base, _ = os.path.splitext(output_filename)
     crush_filename = base + '_crush.png'
@@ -178,11 +216,14 @@ def crush(output_filename):
 ######################################################################
 
 def percent(string):
+    '''Convert a string (i.e. 85) to a fraction (i.e. .85).'''
     return float(string)/100.0
 
 ######################################################################
 
 def parse_args():
+
+    '''Parse the command-line arguments for this program.'''
 
     parser = ArgumentParser(
         description='convert scanned, hand-written notes to PDF')
@@ -243,6 +284,15 @@ def parse_args():
 
 def get_filenames(options):
 
+    '''Get the filenames from the command line, optionally sorted by
+number, so that IMG_10.png is re-arranged to come after IMG_9.png.
+This is a nice feature because some scanner programs (like Image
+Capture on Mac OS X) automatically number files without leading zeros,
+and this way you can supply files using a wildcard and still have the
+pages ordered correctly.
+
+    '''
+
     if not options.sort_numerically:
         return options.filenames
 
@@ -264,6 +314,9 @@ def get_filenames(options):
 
 def load(input_filename):
 
+    '''Load an image with Pillow and convert it to numpy array. Also
+returns the image DPI in x and y as a tuple.'''
+
     pil_img = Image.open(input_filename)
 
     if pil_img.mode != 'RGB':
@@ -282,6 +335,8 @@ def load(input_filename):
 
 def sample_pixels(img, options):
 
+    '''Pick a fixed percentage of pixels in the image, returned in random order.'''
+
     pixels = img.reshape((-1, 3))
     num_pixels = pixels.shape[0]
     num_samples = int(num_pixels*options.sample_fraction)
@@ -295,6 +350,11 @@ def sample_pixels(img, options):
 
 def get_fg_mask(bg_color, samples, options):
 
+    '''Determine whether each pixel in a set of samples is foreground by
+comparing it to the background color. A pixel is classified as a
+foreground pixel if either its value or saturation differs from the
+background by a threshold.'''
+
     s_bg, v_bg = rgb_to_sv(bg_color)
     s_samples, v_samples = rgb_to_sv(samples)
 
@@ -307,6 +367,12 @@ def get_fg_mask(bg_color, samples, options):
 ######################################################################
 
 def get_palette(samples, options):
+
+    '''Extract the palette for the set of sampled RGB values. The first
+palette entry is always the background color; the rest are determined
+from foreground pixels by running K-means clustering.
+
+    '''
 
     print '  getting palette...'
 
@@ -323,6 +389,13 @@ def get_palette(samples, options):
 ######################################################################
 
 def apply_palette(img, palette, options):
+
+    '''Apply the pallete to the given image. The first step is to set all
+background pixels to the background color; then, nearest-neighbor
+matching is used to map each foreground color to the closest one in
+the palette.
+
+    '''
 
     print '  applying palette...'
 
@@ -347,6 +420,13 @@ def apply_palette(img, palette, options):
 
 def save(output_filename, labels, palette, dpi, options):
 
+    '''Save the label/palette pair out as an indexed PNG image.  This
+optionally saturates the pallete by mapping the smallest color
+component to zero and the largest one to 255, and also optionally sets
+the background color to pure white.
+
+    '''
+
     print '  saving {}...'.format(output_filename)
 
     if options.saturate:
@@ -367,6 +447,11 @@ def save(output_filename, labels, palette, dpi, options):
 ######################################################################
 
 def get_global_palette(filenames, options):
+
+    '''Fetch the global palette for a series of input files by merging
+their samples together into one large array.
+
+    '''
 
     input_filenames = []
 
@@ -403,7 +488,9 @@ def get_global_palette(filenames, options):
 
 ######################################################################
 
-def notescan(options):
+def notescan_main(options):
+
+    '''Main function for this program when run as script.'''
 
     filenames = get_filenames(options)
 
@@ -451,13 +538,6 @@ def notescan(options):
 
 ######################################################################
 
-def notescan_main():
-
-    options = parse_args()
-    notescan(options)
-
-######################################################################
-
 if __name__ == '__main__':
 
-    notescan_main()
+    notescan_main(options=parse_args())
