@@ -132,27 +132,6 @@ def nearest(pixels, centers):
 
 ######################################################################
 
-def encode(bg_color, fg_pixels, options):
-
-    num_pixels = fg_pixels.shape[0]
-    num_train = int(round(num_pixels*options.quantize_fraction))
-
-    idx = np.arange(num_pixels)
-    np.random.shuffle(idx)
-    train = fg_pixels[idx[:num_train]].astype(np.float32)
-
-    centers, _ = kmeans(train,
-                        options.num_colors-1,
-                        iter=40)
-
-    labels = nearest(fg_pixels, centers)
-
-    palette = np.vstack((bg_color, centers)).astype(np.uint8)
-
-    return labels+1, palette
-
-######################################################################
-
 def crush(output_filename, crush_filename):
 
     spargs = ['pngcrush', '-q',
@@ -403,6 +382,8 @@ def notescan_main():
 
     if subprocess.call(['convert'] + outputs + [options.pdfname]) == 0:
         print 'wrote', options.pdfname
+
+######################################################################
 
 if __name__ == '__main__':
 
