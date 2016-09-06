@@ -251,7 +251,9 @@ def get_filenames(options):
 
 ######################################################################
 
-def from_pil(pil_img):
+def load(input_filename):
+
+    pil_img = Image.open(input_filename)
 
     if pil_img.mode != 'RGB':
         pil_img = pil_img.convert('RGB')
@@ -332,7 +334,7 @@ def apply_palette(img, palette, options):
 
 ######################################################################
 
-def save_pil(output_filename, labels, palette, dpi, options):
+def save(output_filename, labels, palette, dpi, options):
 
     print '  saving {}...'.format(output_filename)
 
@@ -368,7 +370,7 @@ def notescan_main():
     for input_filename in filenames:
 
         try:
-            pil_img = Image.open(input_filename)
+            img, dpi = load(input_filename)
         except IOError:
             print 'warning: error opening ' + input_filename
             continue
@@ -379,15 +381,13 @@ def notescan_main():
 
         print 'opened', input_filename
 
-        img, dpi = from_pil(pil_img)
-
         samples = sample_pixels(img, options)
 
         palette = get_palette(samples, options)
 
         labels = apply_palette(img, palette, options)
 
-        save_pil(output_filename, labels, palette, dpi, options)
+        save(output_filename, labels, palette, dpi, options)
 
         if do_pngcrush:
             if crush(output_filename, crush_filename):
