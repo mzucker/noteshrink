@@ -264,7 +264,7 @@ def sample_pixels(img, options):
 
 ######################################################################
 
-def get_bg_mask(bg_color, samples, options):
+def get_fg_mask(bg_color, samples, options):
 
     s_bg, v_bg = rgb_to_sv(bg_color)
     s_samples, v_samples = rgb_to_sv(samples)
@@ -272,8 +272,8 @@ def get_bg_mask(bg_color, samples, options):
     s_diff = np.abs(s_bg - s_samples)
     v_diff = np.abs(v_bg - v_samples)
 
-    return ((v_diff < options.value_threshold) &
-            (s_diff < options.sat_threshold))
+    return ((v_diff >= options.value_threshold) |
+            (s_diff >= options.sat_threshold))
 
 ######################################################################
 
@@ -283,9 +283,9 @@ def get_palette(samples, options):
 
     bg_color = get_bg_color(samples, 6)
 
-    bg_mask = get_bg_mask(bg_color, samples, options)
+    fg_mask = get_fg_mask(bg_color, samples, options)
 
-    centers, _ = kmeans(samples[~bg_mask].astype(np.float32),
+    centers, _ = kmeans(samples[fg_mask].astype(np.float32),
                         options.num_colors-1,
                         iter=40)
 
@@ -299,18 +299,18 @@ def apply_palette(img, palette, options):
 
     bg_color = palette[0]
 
-    bg_mask = get_bg_mask(bg_color, img, options)
+    fg_mask = get_fg_mask(bg_color, img, options)
 
     orig_shape = img.shape
 
     pixels = img.reshape((-1, 3))
-    bg_mask = bg_mask.flatten()
+    fg_mask = fg_mask.flatten()
 
     num_pixels = pixels.shape[0]
 
     labels = np.zeros(num_pixels, dtype=np.uint8)
 
-    labels[~bg_mask] = nearest(pixels[~bg_mask], palette)
+    labels[fg_mask] = nearest(pixels[fg_mask], palette)
 
     return labels.reshape(orig_shape[:-1])
 
