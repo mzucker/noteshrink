@@ -12,6 +12,8 @@ import sys
 import os
 import re
 import subprocess
+import shlex
+
 from argparse import ArgumentParser
 
 import numpy as np
@@ -163,57 +165,47 @@ data structures.
 
 ######################################################################
 
-def detect_pngcrush():
+def postprocess(output_filename, options):
 
-    '''Detect whether the external pngcrush program is available.'''
+    '''Runs the postprocessing command on the file provided.'''
 
-    try:
-        result = subprocess.call(['pngcrush', '-q'])
-    except OSError:
-        result = -1
-
-    if result != 0:
-        sys.stderr.write('warning: no working pngcrush found!\n')
-        return False
-    else:
-        return True
-
-######################################################################
-
-def crush(output_filename, options):
-
-    '''Runs pngcrush on the file provided.'''
+    assert options.postprocess_cmd
 
     base, _ = os.path.splitext(output_filename)
-    crush_filename = base + '_crush.png'
+    post_filename = base + options.postprocess_ext
 
-    spargs = ['pngcrush', '-q',
-              output_filename,
-              crush_filename]
+    cmd = options.postprocess_cmd
+    cmd = cmd.replace('%i', output_filename)
+    cmd = cmd.replace('%o', post_filename)
+    cmd = cmd.replace('%e', options.postprocess_ext)
+
+    subprocess_args = shlex.split(cmd)
+
+    if os.path.exists(post_filename):
+        os.unlink(post_filename)
 
     if not options.quiet:
-        print '  pngcrush -> {}...'.format(crush_filename),
+        print '  running "{}"...'.format(cmd),
         sys.stdout.flush()
 
     try:
-        result = subprocess.call(spargs)
+        result = subprocess.call(subprocess_args)
+        before = os.stat(output_filename).st_size
+        after = os.stat(post_filename).st_size
     except OSError:
         result = -1
 
     if result == 0:
 
-        before = os.stat(output_filename).st_size
-        after = os.stat(crush_filename).st_size
-
         if not options.quiet:
             print '{:.1f}% reduction'.format(
                 100*(1.0-float(after)/before))
 
-        return crush_filename
+        return post_filename
 
     else:
 
-        sys.stderr.write('warning: pngcrush failed!\n')
+        sys.stderr.write('warning: postprocessing failed!\n')
         return None
 
 ######################################################################
@@ -241,7 +233,7 @@ def parse_args():
                         help='reduce program output')
 
     parser.add_argument('-b', dest='basename', metavar='BASENAME',
-                        default='output_page_',
+                        default='page',
                         help='output PNG filename base' + show_default)
 
     parser.add_argument('-o', dest='pdfname', metavar='PDF',
@@ -273,9 +265,6 @@ def parse_args():
                         action='store_true', default=False,
                         help='use one global palette for all pages')
 
-    parser.add_argument('-C', dest='crush', action='store_false',
-                        default=True, help='do not run pngcrush')
-
     parser.add_argument('-S', dest='saturate', action='store_false',
                         default=True, help='do not saturate colors')
 
@@ -284,6 +273,33 @@ def parse_args():
                         help='keep filenames ordered as specified; '
                         'use if you *really* want IMG_10.png to '
                         'precede IMG_2.png')
+
+    parser.add_argument('-P', dest='postprocess_cmd', default=None,
+                        help='set postprocessing command (see -O, -C, -Q)')
+
+    parser.add_argument('-e', dest='postprocess_ext',
+                        default='_post.png',
+                        help='filename suffix/extension for '
+                        'postprocessing command')
+
+    parser.add_argument('-O', dest='postprocess_cmd',
+                        action='store_const',
+                        const='optipng -silent %i -out %o',
+                        help='same as -P "%(const)s"')
+
+    parser.add_argument('-C', dest='postprocess_cmd',
+                        action='store_const',
+                        const='pngcrush -q %i %o',
+                        help='same as -P "%(const)s"')
+
+    parser.add_argument('-Q', dest='postprocess_cmd',
+                        action='store_const',
+                        const='pngquant --ext %e %i',
+                        help='same as -P "%(const)s"')
+
+    parser.add_argument('-c', dest='pdf_cmd', metavar="COMMAND",
+                        default='convert %i %o',
+                        help='PDF command (default "%(default)s")')
 
     return parser.parse_args()
 
@@ -505,6 +521,34 @@ their samples together into one large array.
 
 ######################################################################
 
+def emit_pdf(outputs, options):
+
+    '''Runs the PDF conversion command to generate the PDF.'''
+
+    cmd = options.pdf_cmd
+    cmd = cmd.replace('%o', options.pdfname)
+    if len(outputs) > 1:
+        cmd_print = cmd.replace('%i', '{} ...'.format(outputs[0]))
+    else:
+        cmd_print = cmd.replace('%i', outputs[0])
+    cmd = cmd.replace('%i', ' '.join(outputs))
+
+    if not options.quiet:
+        print 'running PDF command "{}"...'.format(cmd_print)
+
+    try:
+        result = subprocess.call(shlex.split(cmd))
+    except OSError:
+        result = -1
+
+    if result == 0:
+        if not options.quiet:
+            print '  wrote', options.pdfname
+    else:
+        sys.stderr.write('warning: PDF command failed\n')
+
+######################################################################
+
 def notescan_main(options):
 
     '''Main function for this program when run as script.'''
@@ -513,11 +557,12 @@ def notescan_main(options):
 
     outputs = []
 
-    do_pngcrush = options.crush and detect_pngcrush()
     do_global = options.global_palette and len(filenames) > 1
 
     if do_global:
         filenames, palette = get_global_palette(filenames, options)
+
+    do_postprocess = bool(options.postprocess_cmd)
 
     for input_filename in filenames:
 
@@ -539,21 +584,19 @@ def notescan_main(options):
 
         save(output_filename, labels, palette, dpi, options)
 
-        if do_pngcrush:
-            crush_filename = crush(output_filename, options)
-            if crush_filename:
-                output_filename = crush_filename
+        if do_postprocess:
+            post_filename = postprocess(output_filename, options)
+            if post_filename:
+                output_filename = post_filename
             else:
-                do_pngcrush = False
+                do_postprocess = False
 
         outputs.append(output_filename)
 
         if not options.quiet:
             print '  done\n'
 
-    if subprocess.call(['convert'] + outputs + [options.pdfname]) == 0:
-        if not options.quiet:
-            print 'wrote', options.pdfname
+    emit_pdf(outputs, options)
 
 ######################################################################
 
