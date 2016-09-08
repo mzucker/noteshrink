@@ -527,10 +527,10 @@ def emit_pdf(outputs, options):
 
     cmd = options.pdf_cmd
     cmd = cmd.replace('%o', options.pdfname)
-    if len(outputs) > 1:
-        cmd_print = cmd.replace('%i', '{} ...'.format(outputs[0]))
+    if len(outputs) > 2:
+        cmd_print = cmd.replace('%i', ' '.join(outputs[:2] + ['...']))
     else:
-        cmd_print = cmd.replace('%i', outputs[0])
+        cmd_print = cmd.replace('%i', ' '.join(outputs))
     cmd = cmd.replace('%i', ' '.join(outputs))
 
     if not options.quiet:
