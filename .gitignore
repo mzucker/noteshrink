@@ -3,4 +3,5 @@
 nogit/*
 *.pyc
 week*
-output*
+output.pdf
+page*png
