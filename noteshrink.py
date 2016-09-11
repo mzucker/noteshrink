@@ -187,7 +187,7 @@ def percent(string):
 
 ######################################################################
 
-def parse_args():
+def get_argument_parser():
 
     '''Parse the command-line arguments for this program.'''
 
@@ -272,7 +272,7 @@ def parse_args():
                         default='convert %i %o',
                         help='PDF command (default "%(default)s")')
 
-    return parser.parse_args()
+    return parser
 
 ######################################################################
 
@@ -366,11 +366,12 @@ background by a threshold.'''
 
 ######################################################################
 
-def get_palette(samples, options):
+def get_palette(samples, options, return_mask=False, kmeans_iter=40):
 
     '''Extract the palette for the set of sampled RGB values. The first
 palette entry is always the background color; the rest are determined
-from foreground pixels by running K-means clustering.
+from foreground pixels by running K-means clustering. Returns the
+palette, as well as a mask corresponding to the foreground pixels.
 
     '''
 
@@ -383,9 +384,14 @@ from foreground pixels by running K-means clustering.
 
     centers, _ = kmeans(samples[fg_mask].astype(np.float32),
                         options.num_colors-1,
-                        iter=40)
+                        iter=kmeans_iter)
 
-    return np.vstack((bg_color, centers)).astype(np.uint8)
+    palette = np.vstack((bg_color, centers)).astype(np.uint8)
+
+    if not return_mask:
+        return palette
+    else:
+        return palette, fg_mask
 
 ######################################################################
 
@@ -573,4 +579,4 @@ def notescan_main(options):
 
 if __name__ == '__main__':
 
-    notescan_main(options=parse_args())
+    notescan_main(options=get_argument_parser().parse_args())
