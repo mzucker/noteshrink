@@ -18,7 +18,7 @@ from argparse import ArgumentParser
 
 import numpy as np
 from PIL import Image
-from scipy.cluster.vq import kmeans
+from scipy.cluster.vq import kmeans, vq
 
 ######################################################################
 
@@ -32,10 +32,9 @@ def quantize(image, bits_per_channel=None):
     assert image.dtype == np.uint8
 
     shift = 8-bits_per_channel
-    halfbin = 1 << (shift - 1)
+    halfbin = (1 << shift) >> 1
 
-    return (((image.astype(int) + halfbin) >> shift)
-            << shift) + halfbin
+    return ((image.astype(int) >> shift) << shift) + halfbin
 
 ######################################################################
 
@@ -134,34 +133,6 @@ value.
     value = cmax/255.0
 
     return saturation, value
-
-######################################################################
-
-def nearest(pixels, centers):
-
-    '''Maps each pixel in an image to the nearest color in the centers
-array provided. For small numbers of centers, this brute-force nearest
-neighbor finder is faster than using a KDTree from scipy's spatial
-data structures.
-
-    '''
-
-    pixels = pixels.astype(int)
-    centers = centers.astype(int)
-
-    num_pixels = pixels.shape[0]
-    num_channels = pixels.shape[1]
-    num_centers = centers.shape[0]
-
-    assert centers.shape[1] == num_channels
-
-    dists = np.empty((num_pixels, num_centers), dtype=pixels.dtype)
-
-    for i in range(num_centers):
-        dists_i = pixels - centers[i].reshape((1, num_channels))
-        dists[:, i] = (dists_i**2).sum(axis=1)
-
-    return dists.argmin(axis=1)
 
 ######################################################################
 
@@ -443,7 +414,7 @@ the palette.
 
     labels = np.zeros(num_pixels, dtype=np.uint8)
 
-    labels[fg_mask] = nearest(pixels[fg_mask], palette)
+    labels[fg_mask], _ = vq(pixels[fg_mask], palette)
 
     return labels.reshape(orig_shape[:-1])
 
