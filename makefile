@@ -18,7 +18,7 @@ example_output/notesB.pdf: examples/notesB1.jpg examples/notesB2.jpg
 example_output/tree.pdf: examples/tree.jpg 
 	mkdir -p example_output && \
 	cd example_output && \
-	../noteshrink.py -O -o tree.pdf ../examples/tree.jpg
+	../noteshrink.py -O -w -o tree.pdf ../examples/tree.jpg
 
 example_output/graph-paper-ink-only.pdf: examples/graph-paper-ink-only.jpg 
 	mkdir -p example_output && \
