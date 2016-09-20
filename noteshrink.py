@@ -54,9 +54,9 @@ works on both arrays and tuples.'''
 
     rgb = rgb.astype(int).reshape((-1, 3))
 
-    packed = (rgb[:, 0] |
+    packed = (rgb[:, 0] << 16 |
               rgb[:, 1] << 8 |
-              rgb[:, 2] << 16)
+              rgb[:, 2])
 
     if orig_shape is None:
         return packed
@@ -79,9 +79,9 @@ def unpack_rgb(packed):
         orig_shape = packed.shape
         packed = packed.reshape((-1, 1))
 
-    rgb = (packed & 0xff,
+    rgb = ((packed >> 16) & 0xff,
            (packed >> 8) & 0xff,
-           (packed >> 16) & 0xff)
+           (packed) & 0xff)
 
     if orig_shape is None:
         return rgb
