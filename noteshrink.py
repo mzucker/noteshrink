@@ -577,6 +577,9 @@ def notescan_main(options):
 
 ######################################################################
 
-if __name__ == '__main__':
-
+def main():
+    '''Parse args and call notescan_main().'''
     notescan_main(options=get_argument_parser().parse_args())
+
+if __name__ == '__main__':
+    main()
