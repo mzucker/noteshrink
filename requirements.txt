@@ -1,4 +1,4 @@
-notescan
+noteshrink
 numpy
 scipy
 Image
