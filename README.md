@@ -1,13 +1,14 @@
 noteshrink
 ==========
 
-Convert scans of handwritten notes to beautiful, compact PDFs -- see full writeup at <https://mzucker.github.io/2016/09/20/noteshrink.html>
+Convert scans of handwritten notes to beautiful, compact PDFs -- see full write-up at <https://mzucker.github.io/2016/09/20/noteshrink.html>
 
 ## Requirements
 
- - python 2
- - numpy
- - scipy
+ - Python 2 or 3
+ - NumPy
+ - SciPy
+ - ImageMagick
  - Image module from PIL or Pillow
 
 ## Usage
