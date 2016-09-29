@@ -158,8 +158,8 @@ def postprocess(output_filename, options):
         os.unlink(post_filename)
 
     if not options.quiet:
-        print('  running "{}"...'.format(cmd),
-        sys.stdout.flush())
+        print('  running "{}"...'.format(cmd), end=' ')
+        sys.stdout.flush()
 
     try:
         result = subprocess.call(subprocess_args)
