@@ -26,3 +26,7 @@ make
 ## Packages
 Packages are available for:
  - [Arch Linux (AUR)](https://aur.archlinux.org/packages/noteshrink/)
+ 
+## Derived works
+
+  - [Web-based (Django) front-end](https://github.com/delneg/noteshrinker-django)
