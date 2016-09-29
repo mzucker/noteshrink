@@ -10,17 +10,17 @@ example_output/notesA.pdf: examples/notesA1.jpg examples/notesA2.jpg
 	cd example_output && \
 	../noteshrink.py -O -g -w -s 20 -v 30 -o notesA.pdf ../examples/notesA*.jpg
 
-example_output/notesB.pdf: examples/notesB1.jpg examples/notesB2.jpg 
+example_output/notesB.pdf: examples/notesB1.jpg examples/notesB2.jpg
 	mkdir -p example_output && \
 	cd example_output && \
 	../noteshrink.py -O -g -w -s 4.5 -v 30 -o notesB.pdf ../examples/notesB*.jpg
 
-example_output/tree.pdf: examples/tree.jpg 
+example_output/tree.pdf: examples/tree.jpg
 	mkdir -p example_output && \
 	cd example_output && \
 	../noteshrink.py -O -w -o tree.pdf ../examples/tree.jpg
 
-example_output/graph-paper-ink-only.pdf: examples/graph-paper-ink-only.jpg 
+example_output/graph-paper-ink-only.pdf: examples/graph-paper-ink-only.jpg
 	mkdir -p example_output && \
 	cd example_output && \
 	../noteshrink.py -O -v 5 -o graph-paper-ink-only.pdf ../examples/graph-paper-ink-only.jpg
