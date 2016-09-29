@@ -1,4 +1,4 @@
 noteshrink
-numpy
+numpy>=1.10
 scipy
 Image
