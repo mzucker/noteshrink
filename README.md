@@ -6,7 +6,7 @@ Convert scans of handwritten notes to beautiful, compact PDFs -- see full writeu
 ## Requirements
 
  - Python 2 or 3
- - NumPy
+ - NumPy 1.10 or later
  - SciPy
  - ImageMagick
  - Image module from PIL or Pillow
