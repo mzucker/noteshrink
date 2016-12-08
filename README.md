@@ -17,6 +17,12 @@ Convert scans of handwritten notes to beautiful, compact PDFs -- see full writeu
 ./noteshrink.py IMAGE1 [IMAGE2 ...]
 ```
 
+Now it'll also work with folders passed as arguments, grabbing all images with specified extensions(by default png and jpg files) e.g.
+
+```
+./noteshrink.py -E '.png, .jpg' examples
+```
+
 Building the examples (already in `example_output`):
 
 ```
@@ -24,6 +30,7 @@ make
 ```
 
 PDF command failed for windows users:
+
 ImageMagick's Convert command is probably colliding with windows' one(https://technet.microsoft.com/en-us/library/bb490885.aspx), you can easily fix that assigning it with '-c' argument
 ```
 python noteshrink.py -c "magick convert %i %o" IMAGE1 [IMAGE2 ...]
