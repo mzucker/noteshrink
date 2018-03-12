@@ -6,10 +6,16 @@ Convert scans of handwritten notes to beautiful, compact PDFs -- see full writeu
 ## Requirements
 
  - Python 2 or 3
+
+Python libraries: (use requirements.txt)
  - NumPy 1.10 or later
  - SciPy
- - ImageMagick
  - Image module from PIL or Pillow
+
+Also:
+ - ImageMagick (for "convert")
+   - on macOS: `brew install imagemagick` (requires Homebrew)
+   - on Debian/Ubuntu: `sudo apt-get install imagemagick`
 
 ## Usage
 
@@ -26,7 +32,7 @@ make
 ## Packages
 Packages are available for:
  - [Arch Linux (AUR)](https://aur.archlinux.org/packages/noteshrink/)
- 
+
 ## Derived works
 
 *Note:* Projects listed here aren't necessarily tested or endorsed by me -- use with care!
