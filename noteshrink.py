@@ -399,7 +399,7 @@ palette, as well as a mask corresponding to the foreground pixels.
 
 def apply_palette(img, palette, options):
 
-    '''Apply the pallete to the given image. The first step is to set all
+    '''Apply the palette to the given image. The first step is to set all
 background pixels to the background color; then, nearest-neighbor
 matching is used to map each foreground color to the closest one in
 the palette.
@@ -431,7 +431,7 @@ the palette.
 def save(output_filename, labels, palette, dpi, options):
 
     '''Save the label/palette pair out as an indexed PNG image.  This
-optionally saturates the pallete by mapping the smallest color
+optionally saturates the palette by mapping the smallest color
 component to zero and the largest one to 255, and also optionally sets
 the background color to pure white.
 
