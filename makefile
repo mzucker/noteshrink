@@ -1,9 +1,13 @@
-all: example_output/notesA.pdf \
+all: install \
+	example_output/notesA.pdf \
 	example_output/notesB.pdf \
 	example_output/tree.pdf \
 	example_output/graph-paper-ink-only.pdf
 
-
+install:
+	@echo Install PIP requirements
+	pip3 install -r requirements.txt
+	@echo Installation finished, install imagemagick manually
 
 example_output/notesA.pdf: examples/notesA1.jpg examples/notesA2.jpg
 	mkdir -p example_output && \

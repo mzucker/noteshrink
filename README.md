@@ -2,20 +2,36 @@ noteshrink
 ==========
 
 Convert scans of handwritten notes to beautiful, compact PDFs -- see full writeup at <https://mzucker.github.io/2016/09/20/noteshrink.html>
+Original work by Matt Zucker <https://github.com/mzucker/noteshrink>
 
 ## Requirements
 
- - Python 2 or 3
+ - Python 3
 
 Python libraries: (use requirements.txt)
  - NumPy 1.10 or later
- - SciPy
- - Image module from PIL or Pillow
+ - SciPy 1.0.0 or later
+ - Image module from Pillow 5.0.0 or later
 
 Also:
  - ImageMagick (for "convert")
    - on macOS: `brew install imagemagick` (requires Homebrew)
    - on Debian/Ubuntu: `sudo apt-get install imagemagick`
+
+## Installation
+
+Install python dependencies: (Don't forget virtualenv)
+```
+make install
+```
+or 
+```
+pip3 install -r requirements.txt
+```
+
+Install imagemagick:
+ - on macOS: `brew install imagemagick` (requires Homebrew)
+ - on Debian/Ubuntu: `sudo apt-get install imagemagick`
 
 ## Usage
 

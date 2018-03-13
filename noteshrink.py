@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 '''Converts sequence of images to compact PDF while removing speckles,
 bleedthrough, etc.
@@ -19,7 +19,7 @@ import shlex
 from argparse import ArgumentParser
 
 import numpy as np
-from PIL import Image
+from Pillow import Image
 from scipy.cluster.vq import kmeans, vq
 
 ######################################################################

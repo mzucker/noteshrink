@@ -16,15 +16,15 @@ if sys.argv[-1] == "publish":
 
 setup(
     name="noteshrink",
-    version="0.1.1",
-    author="Matt Zucker",
+    version="0.1.2",
+    author="Maral Afris (from Matt Zucker)",
     description="Convert scans of handwritten notes to beautiful, compact PDFs",
     url="https://github.com/mzucker/noteshrink",
     py_modules=["noteshrink"],
     install_requires=[
         "numpy>=1.1.0",
-        "scipy",
-        "pillow",
+        "scipy>=1.0.0",
+        "Pillow>=5.0.0",
     ],
     entry_points="""
         [console_scripts]
