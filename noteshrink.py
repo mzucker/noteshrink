@@ -19,7 +19,7 @@ import shlex
 from argparse import ArgumentParser
 
 import numpy as np
-from Pillow import Image
+from PIL import Image
 from scipy.cluster.vq import kmeans, vq
 
 ######################################################################
