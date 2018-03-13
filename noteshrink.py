@@ -464,7 +464,7 @@ the background color to pure white.
         palette[0] = (255, 255, 255)
 
     output_img = Image.fromarray(labels, 'P')
-    output_img.putpalette(palette.flatten())
+    output_img.putpalette(palette.flatten().tobytes())
     output_img.save(output_filename, dpi=dpi)
 
 ######################################################################
