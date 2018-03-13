@@ -274,6 +274,11 @@ def get_argument_parser():
                         default='convert %i %o',
                         help='PDF command (default "%(default)s")')
 
+    parser.add_argument('-E', dest='files_ext',
+                        default='.png, .jpg',
+                        help='filename extensions accepted '
+                        'from folder (default "%(default)s")')
+
     return parser
 
 ######################################################################
@@ -288,13 +293,20 @@ and this way you can supply files using a wildcard and still have the
 pages ordered correctly.
 
     '''
+    filenames = []
+    for name in options.filenames:
+        if os.path.isdir(name):
+            for file in os.listdir(name):
+                if file.endswith(tuple(options.files_ext.replace(' ','').split(','))):
+                    filenames.append(name+'\\'+file)
+        else:
+            filenames.append(name)
 
     if not options.sort_numerically:
-        return options.filenames
+        return filenames
 
-    filenames = []
-
-    for filename in options.filenames:
+    sorted_filenames = []
+    for filename in filenames:
         basename = os.path.basename(filename)
         root, _ = os.path.splitext(basename)
         matches = re.findall(r'[0-9]+', root)
@@ -302,9 +314,9 @@ pages ordered correctly.
             num = int(matches[-1])
         else:
             num = -1
-        filenames.append((num, filename))
+        sorted_filenames.append((num, filename))
 
-    return [fn for (_, fn) in sorted(filenames)]
+    return [fn for (_, fn) in sorted(sorted_filenames)]
 
 ######################################################################
 
