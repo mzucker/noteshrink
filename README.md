@@ -51,3 +51,4 @@ Packages are available for:
 *Note:* Projects listed here aren't necessarily tested or endorsed by me -- use with care!
 
   - [Web-based (Django) front-end](https://github.com/delneg/noteshrinker-django)
+  - [Noteshrink Docker Image](https://hub.docker.com/r/johnpaulada/noteshrink/)
