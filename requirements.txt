@@ -2,3 +2,5 @@ numpy>=1.10
 scipy>=1.0.0
 Image>=1.5.19
 Pillow>=5.0.0
+pdf2image==0.1.8
+python-magic==0.4.15
