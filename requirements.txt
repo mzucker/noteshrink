@@ -2,3 +2,5 @@ noteshrink
 numpy>=1.10
 scipy
 Image
+pdf2image==0.1.8
+python-magic==0.4.15

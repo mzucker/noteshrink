@@ -19,8 +19,10 @@ import shlex
 from argparse import ArgumentParser
 
 import numpy as np
+import magic
 from PIL import Image
 from scipy.cluster.vq import kmeans, vq
+from pdf2image import convert_from_path
 
 ######################################################################
 
@@ -312,10 +314,12 @@ def load(input_filename):
 
     '''Load an image with Pillow and convert it to numpy array. Also
 returns the image DPI in x and y as a tuple.'''
-
     try:
-        pil_img = Image.open(input_filename)
-    except IOError:
+        if magic.from_file(input_filename, mime=True) == 'application/pdf':
+            pil_img = convert_from_path(input_filename)[0]
+        else:
+            pil_img = Image.open(input_filename)
+    except (IOError, KeyError):
         sys.stderr.write('warning: error opening {}\n'.format(
             input_filename))
         return None, None
