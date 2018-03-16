@@ -198,6 +198,11 @@ def get_argument_parser():
 
     show_default = ' (default %(default)s)'
 
+    if sys.platform == "win32":
+        convertCommand = 'magick convert'
+    else:
+        convertCommand = 'convert'
+
     parser.add_argument('filenames', metavar='IMAGE', nargs='+',
                         help='files to convert')
 
@@ -271,7 +276,7 @@ def get_argument_parser():
                         help='same as -P "%(const)s"')
 
     parser.add_argument('-c', dest='pdf_cmd', metavar="COMMAND",
-                        default='convert %i %o',
+                        default=convertCommand+' %i %o',
                         help='PDF command (default "%(default)s")')
 
     return parser
