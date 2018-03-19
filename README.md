@@ -23,6 +23,12 @@ Building the examples (already in `example_output`):
 make
 ```
 
+## pip install
+
+```console
+pip install --user -U git+https://github.com/mzucker/noteshrink
+```
+
 ## Packages
 Packages are available for:
  - [Arch Linux (AUR)](https://aur.archlinux.org/packages/noteshrink/)
