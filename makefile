@@ -9,6 +9,10 @@ install:
 	pip3 install -r requirements.txt
 	@echo Installation finished, install imagemagick manually
 
+docker_build:
+	@echo Building Docker container noteshrink
+	docker build -t noteshrink -f Dockerfile .
+
 example_output/notesA.pdf: examples/notesA1.jpg examples/notesA2.jpg
 	mkdir -p example_output && \
 	cd example_output && \
