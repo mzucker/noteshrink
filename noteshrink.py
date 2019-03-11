@@ -23,6 +23,7 @@ import magic
 from PIL import Image
 from scipy.cluster.vq import kmeans, vq
 from pdf2image import convert_from_path
+from fpdf import FPDF
 
 ######################################################################
 
@@ -272,10 +273,6 @@ def get_argument_parser():
                         const='pngquant --ext %e %i',
                         help='same as -P "%(const)s"')
 
-    parser.add_argument('-c', dest='pdf_cmd', metavar="COMMAND",
-                        default='convert %i %o',
-                        help='PDF command (default "%(default)s")')
-
     parser.add_argument('-E', dest='files_ext',
                         default='.png, .jpg',
                         help='filename extensions accepted '
@@ -518,29 +515,34 @@ their samples together into one large array.
 
 def emit_pdf(outputs, options):
 
-    '''Runs the PDF conversion command to generate the PDF.'''
+    '''Runs the PDF conversion.'''
+    if not options.quiet:
+        print('running PDF conversion from "{}"...'.format(outputs))
 
-    cmd = options.pdf_cmd
-    cmd = cmd.replace('%o', options.pdfname)
-    if len(outputs) > 2:
-        cmd_print = cmd.replace('%i', ' '.join(outputs[:2] + ['...']))
-    else:
-        cmd_print = cmd.replace('%i', ' '.join(outputs))
-    cmd = cmd.replace('%i', ' '.join(outputs))
+    pdf = FPDF()
+    for img in outputs:
+        width, height = Image.open(img).size
+
+        # convert pixel to mm with 1px=0.264583 mm
+        w, h = float(width * 0.264583), float(height * 0.264583)
+
+        # given we are working with A4 format size
+        pdf_dim = {'P': {'w': 210, 'h': 297}, 'L': {'w': 297, 'h': 210}}
+
+        # get page orientation from image size
+        orient = 'P' if width < height else 'L'
+
+        #  make sure image size is not greater than the pdf format size
+        w = w if w < pdf_dim[orient]['w'] else pdf_dim[orient]['w']
+        h = h if h < pdf_dim[orient]['h'] else pdf_dim[orient]['h']
+
+        pdf.add_page(orientation=orient)
+
+        pdf.image(img, 0, 0, w, h)
+    pdf.output(options.pdfname, "F")
 
     if not options.quiet:
-        print('running PDF command "{}"...'.format(cmd_print))
-
-    try:
-        result = subprocess.call(shlex.split(cmd))
-    except OSError:
-        result = -1
-
-    if result == 0:
-        if not options.quiet:
-            print('  wrote', options.pdfname)
-    else:
-        sys.stderr.write('warning: PDF command failed\n')
+        print('PDF created: "{}"...'.format(options.pdfname))
 
 ######################################################################
 

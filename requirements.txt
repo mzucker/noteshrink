@@ -4,3 +4,4 @@ Image>=1.5.27
 Pillow>=5.4.1
 pdf2image>=1.4.2
 python-magic>=0.4.15
+fpdf>=1.7.2
