@@ -6,6 +6,7 @@
 
 from __future__ import print_function
 
+import img2pdf
 import sys
 import os
 import re
@@ -267,10 +268,6 @@ def get_argument_parser():
                         const='pngquant --ext %e %i',
                         help='same as -P "%(const)s"')
 
-    parser.add_argument('-c', dest='pdf_cmd', metavar="COMMAND",
-                        default='convert %i %o',
-                        help='PDF command (default "%(default)s")')
-
     return parser
 
 
@@ -491,38 +488,17 @@ their samples together into one large array.
 
 ######################################################################
 
-def emit_pdf(outputs, pdf_cmd, pdfname, quiet):
+def emit_pdf(outputs, pdfname):
     """Runs the PDF conversion command to generate the PDF."""
-
-    cmd = pdf_cmd
-    cmd = cmd.replace('%o', pdfname)
-    if len(outputs) > 2:
-        cmd_print = cmd.replace('%i', ' '.join(outputs[:2] + ['...']))
-    else:
-        cmd_print = cmd.replace('%i', ' '.join(outputs))
-    cmd = cmd.replace('%i', ' '.join(outputs))
-
-    if not quiet:
-        print('running PDF command "{}"...'.format(cmd_print))
-
-    try:
-        result = subprocess.call(shlex.split(cmd))
-    except OSError:
-        result = -1
-
-    if result == 0:
-        if not quiet:
-            print('  wrote', pdfname)
-    else:
-        sys.stderr.write('warning: PDF command failed\n')
+    with open(pdfname, 'wb') as f:
+        f.write(img2pdf.convert(outputs))
 
 
 ######################################################################
 
 def notescan_main(filenames, quiet=True, basename='page', pdfname='output.pdf', value_threshold=0.25, sat_threshold=0.2,
                   num_colors=8, sample_fraction=0.05, white_bg=False, global_palette=False, saturate=True,
-                  sort_numerically=True, postprocess_cmd=None, postprocess_ext='_post.png', pdf_cmd='convert %i %o',
-                  **kwargs):
+                  sort_numerically=True, postprocess_cmd=None, postprocess_ext='_post.png', **kwargs):
     """Main function for this program when run as script."""
 
     filenames = get_filenames(filenames, sort_numerically)
@@ -565,7 +541,7 @@ def notescan_main(filenames, quiet=True, basename='page', pdfname='output.pdf', 
         if not quiet:
             print('  done\n')
 
-    emit_pdf(outputs, pdf_cmd, pdfname, quiet)
+    emit_pdf(outputs, pdfname)
 
 
 ######################################################################
