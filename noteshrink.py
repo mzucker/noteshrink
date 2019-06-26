@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 
-'''Converts sequence of images to compact PDF while removing speckles,
-bleedthrough, etc.
-
-'''
-
+# Converts sequence of images to compact PDF while removing speckles, bleedthrough, etc.
 # for some reason pylint complains about members being undefined :(
 # pylint: disable=E1101
 
@@ -22,28 +18,28 @@ import numpy as np
 from PIL import Image
 from scipy.cluster.vq import kmeans, vq
 
+
 ######################################################################
 
 def quantize(image, bits_per_channel=None):
-
-    '''Reduces the number of bits per channel in the given image.'''
+    """Reduces the number of bits per channel in the given image."""
 
     if bits_per_channel is None:
         bits_per_channel = 6
 
     assert image.dtype == np.uint8
 
-    shift = 8-bits_per_channel
+    shift = 8 - bits_per_channel
     halfbin = (1 << shift) >> 1
 
     return ((image.astype(int) >> shift) << shift) + halfbin
 
+
 ######################################################################
 
 def pack_rgb(rgb):
-
-    '''Packs a 24-bit RGB triples into a single integer,
-works on both arrays and tuples.'''
+    """Packs a 24-bit RGB triples into a single integer,
+works on both arrays and tuples."""
 
     orig_shape = None
 
@@ -65,14 +61,14 @@ works on both arrays and tuples.'''
     else:
         return packed.reshape(orig_shape)
 
+
 ######################################################################
 
 def unpack_rgb(packed):
-
-    '''Unpacks a single integer or array of integers into one or more
+    """Unpacks a single integer or array of integers into one or more
 24-bit RGB values.
 
-    '''
+    """
 
     orig_shape = None
 
@@ -83,22 +79,22 @@ def unpack_rgb(packed):
 
     rgb = ((packed >> 16) & 0xff,
            (packed >> 8) & 0xff,
-           (packed) & 0xff)
+           packed & 0xff)
 
     if orig_shape is None:
         return rgb
     else:
         return np.hstack(rgb).reshape(orig_shape + (3,))
 
+
 ######################################################################
 
 def get_bg_color(image, bits_per_channel=None):
-
-    '''Obtains the background color from an image or array of RGB colors
+    """Obtains the background color from an image or array of RGB colors
 by grouping similar colors into bins and finding the most frequent
 one.
 
-    '''
+    """
 
     assert image.shape[-1] == 3
 
@@ -111,20 +107,20 @@ one.
 
     return unpack_rgb(packed_mode)
 
+
 ######################################################################
 
 def rgb_to_sv(rgb):
-
-    '''Convert an RGB image or array of RGB colors to saturation and
+    """Convert an RGB image or array of RGB colors to saturation and
 value, returning each one as a separate 32-bit floating point array or
 value.
 
-    '''
+    """
 
     if not isinstance(rgb, np.ndarray):
         rgb = np.array(rgb)
 
-    axis = len(rgb.shape)-1
+    axis = len(rgb.shape) - 1
     cmax = rgb.max(axis=axis).astype(np.float32)
     cmin = rgb.min(axis=axis).astype(np.float32)
     delta = cmax - cmin
@@ -132,32 +128,32 @@ value.
     saturation = delta.astype(np.float32) / cmax.astype(np.float32)
     saturation = np.where(cmax == 0, 0, saturation)
 
-    value = cmax/255.0
+    value = cmax / 255.0
 
     return saturation, value
 
+
 ######################################################################
 
-def postprocess(output_filename, options):
+def postprocess(output_filename, postprocess_cmd, postprocess_ext, quiet):
+    """Runs the postprocessing command on the file provided."""
 
-    '''Runs the postprocessing command on the file provided.'''
-
-    assert options.postprocess_cmd
+    assert postprocess_cmd
 
     base, _ = os.path.splitext(output_filename)
-    post_filename = base + options.postprocess_ext
+    post_filename = base + postprocess_ext
 
-    cmd = options.postprocess_cmd
+    cmd = postprocess_cmd
     cmd = cmd.replace('%i', output_filename)
     cmd = cmd.replace('%o', post_filename)
-    cmd = cmd.replace('%e', options.postprocess_ext)
+    cmd = cmd.replace('%e', postprocess_ext)
 
     subprocess_args = shlex.split(cmd)
 
     if os.path.exists(post_filename):
         os.unlink(post_filename)
 
-    if not options.quiet:
+    if not quiet:
         print('  running "{}"...'.format(cmd), end=' ')
         sys.stdout.flush()
 
@@ -170,9 +166,9 @@ def postprocess(output_filename, options):
 
     if result == 0:
 
-        if not options.quiet:
+        if not quiet:
             print('{:.1f}% reduction'.format(
-                100*(1.0-float(after)/before)))
+                100 * (1.0 - float(after) / before)))
 
         return post_filename
 
@@ -181,17 +177,18 @@ def postprocess(output_filename, options):
         sys.stderr.write('warning: postprocessing failed!\n')
         return None
 
+
 ######################################################################
 
 def percent(string):
-    '''Convert a string (i.e. 85) to a fraction (i.e. .85).'''
-    return float(string)/100.0
+    """Convert a string (i.e. 85) to a fraction (i.e. .85)."""
+    return float(string) / 100.0
+
 
 ######################################################################
 
 def get_argument_parser():
-
-    '''Parse the command-line arguments for this program.'''
+    """Parse the command-line arguments for this program."""
 
     parser = ArgumentParser(
         description='convert scanned, hand-written notes to PDF')
@@ -215,16 +212,16 @@ def get_argument_parser():
 
     parser.add_argument('-v', dest='value_threshold', metavar='PERCENT',
                         type=percent, default='25',
-                        help='background value threshold %%'+show_default)
+                        help='background value threshold %%' + show_default)
 
     parser.add_argument('-s', dest='sat_threshold', metavar='PERCENT',
                         type=percent, default='20',
                         help='background saturation '
-                        'threshold %%'+show_default)
+                             'threshold %%' + show_default)
 
     parser.add_argument('-n', dest='num_colors', type=int,
                         default='8',
-                        help='number of output colors '+show_default)
+                        help='number of output colors ' + show_default)
 
     parser.add_argument('-p', dest='sample_fraction',
                         metavar='PERCENT',
@@ -244,8 +241,8 @@ def get_argument_parser():
     parser.add_argument('-K', dest='sort_numerically',
                         action='store_false', default=True,
                         help='keep filenames ordered as specified; '
-                        'use if you *really* want IMG_10.png to '
-                        'precede IMG_2.png')
+                             'use if you *really* want IMG_10.png to '
+                             'precede IMG_2.png')
 
     parser.add_argument('-P', dest='postprocess_cmd', default=None,
                         help='set postprocessing command (see -O, -C, -Q)')
@@ -253,7 +250,7 @@ def get_argument_parser():
     parser.add_argument('-e', dest='postprocess_ext',
                         default='_post.png',
                         help='filename suffix/extension for '
-                        'postprocessing command')
+                             'postprocessing command')
 
     parser.add_argument('-O', dest='postprocess_cmd',
                         action='store_const',
@@ -276,25 +273,25 @@ def get_argument_parser():
 
     return parser
 
+
 ######################################################################
 
-def get_filenames(options):
-
-    '''Get the filenames from the command line, optionally sorted by
+def get_filenames(filenames, sort_numerically):
+    """Get the filenames from the command line, optionally sorted by
 number, so that IMG_10.png is re-arranged to come after IMG_9.png.
 This is a nice feature because some scanner programs (like Image
 Capture on Mac OS X) automatically number files without leading zeros,
 and this way you can supply files using a wildcard and still have the
 pages ordered correctly.
 
-    '''
+    """
 
-    if not options.sort_numerically:
-        return options.filenames
+    if not sort_numerically:
+        return filenames
 
-    filenames = []
+    new_filenames = []
 
-    for filename in options.filenames:
+    for filename in filenames:
         basename = os.path.basename(filename)
         root, _ = os.path.splitext(basename)
         matches = re.findall(r'[0-9]+', root)
@@ -302,24 +299,18 @@ pages ordered correctly.
             num = int(matches[-1])
         else:
             num = -1
-        filenames.append((num, filename))
+        new_filenames.append((num, filename))
 
-    return [fn for (_, fn) in sorted(filenames)]
+    return [fn for (_, fn) in sorted(new_filenames)]
+
 
 ######################################################################
 
 def load(input_filename):
+    """Load an image with Pillow and convert it to numpy array. Also
+returns the image DPI in x and y as a tuple."""
 
-    '''Load an image with Pillow and convert it to numpy array. Also
-returns the image DPI in x and y as a tuple.'''
-
-    try:
-        pil_img = Image.open(input_filename)
-    except IOError:
-        sys.stderr.write('warning: error opening {}\n'.format(
-            input_filename))
-        return None, None
-
+    pil_img = Image.open(input_filename)
     if pil_img.mode != 'RGB':
         pil_img = pil_img.convert('RGB')
 
@@ -332,30 +323,30 @@ returns the image DPI in x and y as a tuple.'''
 
     return img, dpi
 
+
 ######################################################################
 
-def sample_pixels(img, options):
-
-    '''Pick a fixed percentage of pixels in the image, returned in random
-order.'''
+def sample_pixels(img, sample_fraction):
+    """Pick a fixed percentage of pixels in the image, returned in random
+order."""
 
     pixels = img.reshape((-1, 3))
     num_pixels = pixels.shape[0]
-    num_samples = int(num_pixels*options.sample_fraction)
+    num_samples = int(num_pixels * sample_fraction)
 
     idx = np.arange(num_pixels)
     np.random.shuffle(idx)
 
     return pixels[idx[:num_samples]]
 
+
 ######################################################################
 
-def get_fg_mask(bg_color, samples, options):
-
-    '''Determine whether each pixel in a set of samples is foreground by
+def get_fg_mask(bg_color, samples, value_threshold, sat_threshold):
+    """Determine whether each pixel in a set of samples is foreground by
 comparing it to the background color. A pixel is classified as a
 foreground pixel if either its value or saturation differs from the
-background by a threshold.'''
+background by a threshold."""
 
     s_bg, v_bg = rgb_to_sv(bg_color)
     s_samples, v_samples = rgb_to_sv(samples)
@@ -363,29 +354,29 @@ background by a threshold.'''
     s_diff = np.abs(s_bg - s_samples)
     v_diff = np.abs(v_bg - v_samples)
 
-    return ((v_diff >= options.value_threshold) |
-            (s_diff >= options.sat_threshold))
+    return ((v_diff >= value_threshold) |
+            (s_diff >= sat_threshold))
+
 
 ######################################################################
 
-def get_palette(samples, options, return_mask=False, kmeans_iter=40):
-
-    '''Extract the palette for the set of sampled RGB values. The first
+def get_palette(samples, quiet, value_threshold, sat_threshold, num_colors, return_mask=False, kmeans_iter=40):
+    """Extract the palette for the set of sampled RGB values. The first
 palette entry is always the background color; the rest are determined
 from foreground pixels by running K-means clustering. Returns the
 palette, as well as a mask corresponding to the foreground pixels.
 
-    '''
+    """
 
-    if not options.quiet:
+    if not quiet:
         print('  getting palette...')
 
     bg_color = get_bg_color(samples, 6)
 
-    fg_mask = get_fg_mask(bg_color, samples, options)
+    fg_mask = get_fg_mask(bg_color, samples, value_threshold, sat_threshold)
 
     centers, _ = kmeans(samples[fg_mask].astype(np.float32),
-                        options.num_colors-1,
+                        num_colors - 1,
                         iter=kmeans_iter)
 
     palette = np.vstack((bg_color, centers)).astype(np.uint8)
@@ -395,23 +386,23 @@ palette, as well as a mask corresponding to the foreground pixels.
     else:
         return palette, fg_mask
 
+
 ######################################################################
 
-def apply_palette(img, palette, options):
-
-    '''Apply the pallete to the given image. The first step is to set all
+def apply_palette(img, palette, quiet, value_threshold, sat_threshold):
+    """Apply the pallete to the given image. The first step is to set all
 background pixels to the background color; then, nearest-neighbor
 matching is used to map each foreground color to the closest one in
 the palette.
 
-    '''
+    """
 
-    if not options.quiet:
+    if not quiet:
         print('  applying palette...')
 
     bg_color = palette[0]
 
-    fg_mask = get_fg_mask(bg_color, img, options)
+    fg_mask = get_fg_mask(bg_color, img, value_threshold, sat_threshold)
 
     orig_shape = img.shape
 
@@ -426,28 +417,28 @@ the palette.
 
     return labels.reshape(orig_shape[:-1])
 
+
 ######################################################################
 
-def save(output_filename, labels, palette, dpi, options):
-
-    '''Save the label/palette pair out as an indexed PNG image.  This
+def save(output_filename, labels, palette, dpi, quiet, saturate, white_bg):
+    """Save the label/palette pair out as an indexed PNG image.  This
 optionally saturates the pallete by mapping the smallest color
 component to zero and the largest one to 255, and also optionally sets
 the background color to pure white.
 
-    '''
+    """
 
-    if not options.quiet:
+    if not quiet:
         print('  saving {}...'.format(output_filename))
 
-    if options.saturate:
+    if saturate:
         palette = palette.astype(np.float32)
         pmin = palette.min()
         pmax = palette.max()
-        palette = 255 * (palette - pmin)/(pmax-pmin)
+        palette = 255 * (palette - pmin) / (pmax - pmin)
         palette = palette.astype(np.uint8)
 
-    if options.white_bg:
+    if white_bg:
         palette = palette.copy()
         palette[0] = (255, 255, 255)
 
@@ -455,20 +446,19 @@ the background color to pure white.
     output_img.putpalette(palette.flatten())
     output_img.save(output_filename, dpi=dpi)
 
+
 ######################################################################
 
-def get_global_palette(filenames, options):
-
-    '''Fetch the global palette for a series of input files by merging
+def get_global_palette(filenames, quiet, sample_fraction, value_threshold, sat_threshold, num_colors):
+    """Fetch the global palette for a series of input files by merging
 their samples together into one large array.
 
-    '''
+    """
 
     input_filenames = []
-
     all_samples = []
 
-    if not options.quiet:
+    if not quiet:
         print('building global palette...')
 
     for input_filename in filenames:
@@ -477,42 +467,42 @@ their samples together into one large array.
         if img is None:
             continue
 
-        if not options.quiet:
+        if not quiet:
             print('  processing {}...'.format(input_filename))
 
-        samples = sample_pixels(img, options)
+        samples = sample_pixels(img, sample_fraction)
         input_filenames.append(input_filename)
         all_samples.append(samples)
 
     num_inputs = len(input_filenames)
 
-    all_samples = [s[:int(round(float(s.shape[0])/num_inputs))]
+    all_samples = [s[:int(round(float(s.shape[0]) / num_inputs))]
                    for s in all_samples]
 
     all_samples = np.vstack(tuple(all_samples))
 
-    global_palette = get_palette(all_samples, options)
+    global_palette = get_palette(all_samples, quiet, value_threshold, sat_threshold, num_colors)
 
-    if not options.quiet:
+    if not quiet:
         print('  done\n')
 
     return input_filenames, global_palette
 
+
 ######################################################################
 
-def emit_pdf(outputs, options):
+def emit_pdf(outputs, pdf_cmd, pdfname, quiet):
+    """Runs the PDF conversion command to generate the PDF."""
 
-    '''Runs the PDF conversion command to generate the PDF.'''
-
-    cmd = options.pdf_cmd
-    cmd = cmd.replace('%o', options.pdfname)
+    cmd = pdf_cmd
+    cmd = cmd.replace('%o', pdfname)
     if len(outputs) > 2:
         cmd_print = cmd.replace('%i', ' '.join(outputs[:2] + ['...']))
     else:
         cmd_print = cmd.replace('%i', ' '.join(outputs))
     cmd = cmd.replace('%i', ' '.join(outputs))
 
-    if not options.quiet:
+    if not quiet:
         print('running PDF command "{}"...'.format(cmd_print))
 
     try:
@@ -521,27 +511,29 @@ def emit_pdf(outputs, options):
         result = -1
 
     if result == 0:
-        if not options.quiet:
-            print('  wrote', options.pdfname)
+        if not quiet:
+            print('  wrote', pdfname)
     else:
         sys.stderr.write('warning: PDF command failed\n')
 
+
 ######################################################################
 
-def notescan_main(options):
+def notescan_main(filenames, quiet=True, basename='page', pdfname='output.pdf', value_threshold=0.25, sat_threshold=0.2,
+                  num_colors=8, sample_fraction=0.05, white_bg=False, global_palette=False, saturate=True,
+                  sort_numerically=True, postprocess_cmd=None, postprocess_ext='_post.png', pdf_cmd='convert %i %o',
+                  **kwargs):
+    """Main function for this program when run as script."""
 
-    '''Main function for this program when run as script.'''
-
-    filenames = get_filenames(options)
-
+    filenames = get_filenames(filenames, sort_numerically)
     outputs = []
-
-    do_global = options.global_palette and len(filenames) > 1
+    do_global = global_palette and len(filenames) > 1
 
     if do_global:
-        filenames, palette = get_global_palette(filenames, options)
+        filenames, palette = get_global_palette(filenames, quiet, sample_fraction, value_threshold, sat_threshold, 
+                                                num_colors)
 
-    do_postprocess = bool(options.postprocess_cmd)
+    do_postprocess = bool(postprocess_cmd)
 
     for input_filename in filenames:
 
@@ -549,22 +541,20 @@ def notescan_main(options):
         if img is None:
             continue
 
-        output_filename = '{}{:04d}.png'.format(
-            options.basename, len(outputs))
-
-        if not options.quiet:
+        output_filename = '{}{:04d}.png'.format(basename, len(outputs))
+        if not quiet:
             print('opened', input_filename)
 
         if not do_global:
-            samples = sample_pixels(img, options)
-            palette = get_palette(samples, options)
+            samples = sample_pixels(img, sample_fraction)
+            palette = get_palette(samples, quiet, value_threshold, sat_threshold, num_colors)
 
-        labels = apply_palette(img, palette, options)
+        labels = apply_palette(img, palette, quiet, value_threshold, sat_threshold)
 
-        save(output_filename, labels, palette, dpi, options)
+        save(output_filename, labels, palette, dpi, quiet, saturate, white_bg)
 
         if do_postprocess:
-            post_filename = postprocess(output_filename, options)
+            post_filename = postprocess(output_filename, postprocess_cmd, postprocess_ext, quiet)
             if post_filename:
                 output_filename = post_filename
             else:
@@ -572,16 +562,21 @@ def notescan_main(options):
 
         outputs.append(output_filename)
 
-        if not options.quiet:
+        if not quiet:
             print('  done\n')
 
-    emit_pdf(outputs, options)
+    emit_pdf(outputs, pdf_cmd, pdfname, quiet)
+
 
 ######################################################################
 
 def main():
-    '''Parse args and call notescan_main().'''
-    notescan_main(options=get_argument_parser().parse_args())
+    """Parse args and call notescan_main()."""
+    parser = get_argument_parser()
+    parser.set_defaults(method=notescan_main)
+    args = parser.parse_args()
+    args.method(**vars(args))
+
 
 if __name__ == '__main__':
     main()
