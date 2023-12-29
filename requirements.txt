@@ -2,3 +2,4 @@ noteshrink
 numpy>=1.10
 scipy
 Image
+PyMuPDF

@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import shlex
+import fitz
 
 from argparse import ArgumentParser
 
@@ -273,7 +274,10 @@ def get_argument_parser():
     parser.add_argument('-c', dest='pdf_cmd', metavar="COMMAND",
                         default='convert %i %o',
                         help='PDF command (default "%(default)s")')
-
+    
+    parser.add_argument('-f', dest='pymupdf_cmd',
+                        action='store_true', default=False,
+                        help='Save PDF as PyMuPDF')
     return parser
 
 ######################################################################
@@ -500,10 +504,30 @@ their samples together into one large array.
 
 ######################################################################
 
+def pymupdf(outputs, options):
+    doc = fitz.open()
+    for i, f in enumerate(outputs):
+        img = fitz.open(f)
+        rect = img[0].rect
+        pdfbytes = img.convert_to_pdf()
+        img.close()
+        imgPDF = fitz.open("pdf", pdfbytes)
+        page = doc.new_page(width = rect.width,
+                        height = rect.height)
+        page.show_pdf_page(rect, imgPDF, 0)
+        
+    if len(options.filenames) == 1 and options.filenames[0].split(".")[-1] == "pdf":
+        ori = fitz.open(options.filenames[0])
+        doc.set_toc(ori.get_toc())
+    doc.save(options.pdfname)
+
 def emit_pdf(outputs, options):
 
     '''Runs the PDF conversion command to generate the PDF.'''
-
+    if options.pymupdf_cmd:
+        pymupdf(outputs, options)
+        return
+    
     cmd = options.pdf_cmd
     cmd = cmd.replace('%o', options.pdfname)
     if len(outputs) > 2:
@@ -579,9 +603,61 @@ def notescan_main(options):
 
 ######################################################################
 
+def pdf_main(options):
+    # filenames = get_filenames(options)
+    pages = fitz.open(options.filenames[0])
+    outputs = []
+
+    do_global = options.global_palette and len(pages) > 1
+
+    if do_global:
+        filenames, palette = get_global_palette(filenames, options)
+
+    do_postprocess = bool(options.postprocess_cmd)
+
+    for each_page in pages:
+        pix = each_page.get_pixmap()
+        img = np.array(Image.frombytes("RGB", [pix.width, pix.height], pix.samples))
+        dpi = (pix.xres, pix.yres,)
+        if img is None:
+            continue
+
+        output_filename = '{}{:04d}.png'.format(
+            options.basename, len(outputs))
+
+        # if not options.quiet:
+        #     print('opened', input_filename)
+
+        if not do_global:
+            samples = sample_pixels(img, options)
+            palette = get_palette(samples, options)
+
+        labels = apply_palette(img, palette, options)
+
+        save(output_filename, labels, palette, dpi, options)
+
+        if do_postprocess:
+            post_filename = postprocess(output_filename, options)
+            if post_filename:
+                output_filename = post_filename
+            else:
+                do_postprocess = False
+
+        outputs.append(output_filename)
+
+        if not options.quiet:
+            print('  done\n')
+
+    emit_pdf(outputs, options)
+    
 def main():
     '''Parse args and call notescan_main().'''
-    notescan_main(options=get_argument_parser().parse_args())
+    options = get_argument_parser().parse_args()
+    opt_filenames = options.filenames
+    if len(opt_filenames) == 1 and opt_filenames[0].split(".")[-1] == "pdf":
+        pdf_main(options=options)
+    else:
+        notescan_main(options=options)
 
 if __name__ == '__main__':
     main()
