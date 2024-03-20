@@ -25,12 +25,17 @@ from sklearn.utils import shuffle
 
 ######################################################################
 
-def quantize(image, bits_per_channel=6):
+def quantize_colors(image, bits_per_channel=6):
+    """
+    Reduces the number of colors in an image by reducing the number of bits per channel.
 
-    '''Reduces the number of bits per channel in the given image.'''
+    Args:
+        image (numpy.ndarray): The input image.
+        bits_per_channel (int): The number of bits per channel (default: 6).
 
-    if bits_per_channel is None:
-        bits_per_channel = 6
+    Returns:
+        numpy.ndarray: The quantized image.
+    """
 
     assert image.dtype == np.uint8
 
@@ -43,17 +48,21 @@ def quantize(image, bits_per_channel=6):
 ######################################################################
 
 def pack_rgb(rgb):
+    """
+    Packs a 24-bit RGB triple into a single integer.
 
-    '''Packs a 24-bit RGB triples into a single integer,
-works on both arrays and tuples.'''
+    Args:
+        rgb (numpy.ndarray or tuple): The RGB values.
 
-    orig_shape = None
+    Returns:
+        int or numpy.ndarray: The packed RGB values.
+    """
 
     if isinstance(rgb, np.ndarray):
-        assert rgb.shape[-1] == 3
+        assert rgb.shape[-1] == 3 # RGB array must have 3 channels
         rgb = rgb.astype(np.uint32)
     else:
-        assert len(rgb) == 3
+        assert len(rgb) == 3 # RGB tuple must have 3 channels
         rgb = np.array(rgb, dtype=np.uint32)
 
     packed = (rgb[:, 0] << 16 |
@@ -65,34 +74,37 @@ works on both arrays and tuples.'''
 ######################################################################
 
 def unpack_rgb(packed):
+    """
+    Unpacks a single integer or array of integers into one or more 24-bit RGB values.
 
-    '''Unpacks a single integer or array of integers into one or more
-24-bit RGB values.
+    Args:
+        packed (int or numpy.ndarray): The packed RGB values.
 
-    '''
+    Returns:
+        numpy.ndarray: The unpacked RGB values.
+    """
 
-#     if isinstance(packed, np.ndarray):
-#         packed = packed.reshape((-1, 1))
-
-    rgb = ((packed >> 16) & 0xff,
-           (packed >> 8) & 0xff,
-           (packed) & 0xff)
-
-    return np.array(rgb, dtype='uint8').T
+    return np.column_stack(((packed >> 16) & 0xff,
+                            (packed >> 8) & 0xff,
+                            packed & 0xff))
 
 ######################################################################
 
-def get_bg_color(pixels, bits_per_channel=6):
+def get_background_color(pixels, bits_per_channel=6):
+    """
+    Estimates the background color from an image or array of RGB colors by finding the most frequent color in the image.
 
-    '''Obtains the background color from an image or array of RGB colors
-by grouping similar colors into bins and finding the most frequent
-one.
+    Args:
+        pixels (numpy.ndarray): The RGB input pixels.
+        bits_per_channel (int): The number of bits per channel (default: 6).
 
-    '''
+    Returns:
+        numpy.ndarray: An RGB tuple representing the background color.
+    """
 
     assert pixels.shape[-1] == 3
 
-    quantized = quantize(pixels, bits_per_channel).astype(np.uint32)
+    quantized = quantize_colors(pixels, bits_per_channel).astype(np.uint32)
     packed = pack_rgb(quantized)
 
     unique, counts = np.unique(packed, return_counts=True)
@@ -104,21 +116,25 @@ one.
 ######################################################################
 
 def rgb_to_sv(rgb):
+    """
+    Converts an RGB image or array of RGB colors to saturation and value, returning each one as a separate
+    32-bit floating point array or value.
 
-    '''Convert an RGB image or array of RGB colors to saturation and
-value, returning each one as a separate 32-bit floating point array or
-value.
+    Args:
+        rgb (numpy.ndarray): The input RGB values.
 
-    '''
+    Returns:
+        tuple: A tuple containing the saturation and value arrays or values.
+    """
 
     if not isinstance(rgb, np.ndarray):
         rgb = np.array(rgb)
 
     rgb = rgb.reshape((-1,3))
 
+    cmin = rgb.min(axis=1)
     cmax = rgb.max(axis=1)
-    # Replace 0/0 values
-    saturation = np.nan_to_num(1 - rgb.min(axis=1) / cmax)
+    saturation = np.where(cmax == 0, 0, 1 - cmin/cmax)  # Handle division by zero
 
     value = cmax/255.0
 
@@ -127,8 +143,17 @@ value.
 ######################################################################
 
 def postprocess(output_filename, options):
+    """
+    Runs a postprocessing command on the provided file.
 
-    '''Runs the postprocessing command on the file provided.'''
+    Args:
+        output_filename (str): The output filename.
+        options (argparse.Namespace): The command-line options.
+
+    Returns:
+        str or None: The postprocessed filename if successful, None otherwise.
+    """
+
 
     assert options.postprocess_cmd
 
@@ -172,14 +197,26 @@ def postprocess(output_filename, options):
 ######################################################################
 
 def percent(string):
-    '''Convert a string (i.e. 85) to a fraction (i.e. .85).'''
-    return float(string)/100.0
+    """
+    Converts a string (e.g., '85') to a fraction (e.g., 0.85).
+
+    Args:
+        string (str): The input string.
+
+    Returns:
+        float: The converted fraction.
+    """
+    return float(string) / 100.0
 
 ######################################################################
 
 def get_argument_parser():
+    """
+    Parses the command-line arguments for the program.
 
-    '''Parse the command-line arguments for this program.'''
+    Returns:
+        argparse.ArgumentParser: The argument parser.
+    """
 
     parser = ArgumentParser(
         description='convert scanned, hand-written notes to PDF')
@@ -267,15 +304,16 @@ def get_argument_parser():
 ######################################################################
 
 def get_filenames(options):
+    """
+    Gets the filenames from the command line, optionally sorted numerically.
+    (..., image10, image9, ...) --> (..., image9, image10, ...)
 
-    '''Get the filenames from the command line, optionally sorted by
-number, so that IMG_10.png is re-arranged to come after IMG_9.png.
-This is a nice feature because some scanner programs (like Image
-Capture on Mac OS X) automatically number files without leading zeros,
-and this way you can supply files using a wildcard and still have the
-pages ordered correctly.
+    Args:
+        options (argparse.Namespace): The command-line options.
 
-    '''
+    Returns:
+        list: The sorted filenames.
+    """
 
     if not options.sort_numerically:
         return options.filenames
@@ -297,16 +335,17 @@ pages ordered correctly.
 ######################################################################
 
 def load(input_filename):
+    """
+    Loads an image with Pillow and converts it to a numpy pixel array.
 
-    '''Load an image with Pillow and convert it to numpy pixel-array. Also
-returns the image DPI in x and y as a tuple as well as the image shape.'''
+    Args:
+        input_filename (str): The input filename.
 
-    try:
-        pil_img = Image.open(input_filename)
-    except IOError:
-        sys.stderr.write('warning: error opening {}\n'.format(
-            input_filename))
-        return None, None
+    Returns:
+        tuple: A tuple containing the pixel array, DPI (x, y), and image shape.
+    """
+
+    pil_img = Image.open(input_filename)
 
     if pil_img.mode != 'RGB':
         pil_img = pil_img.convert('RGB')
@@ -323,9 +362,16 @@ returns the image DPI in x and y as a tuple as well as the image shape.'''
 ######################################################################
 
 def sample_pixels(pixels, options):
+    """
+    Picks a fixed percentage of pixels in the image, returned in random order.
 
-    '''Pick a fixed percentage of pixels in the image, returned in random
-order.'''
+    Args:
+        pixels (numpy.ndarray): The input pixels.
+        options (argparse.Namespace): The command-line options.
+
+    Returns:
+        numpy.ndarray: The sampled pixels.
+    """
 
     num_pixels = pixels.shape[0]
     num_samples = int(round(num_pixels*options.sample_fraction, 0))
@@ -335,11 +381,17 @@ order.'''
 ######################################################################
 
 def get_fg_mask(bg_color, samples, options):
+    """
+    Determines whether each pixel in a set of samples is foreground by comparing it to the background color.
 
-    '''Determine whether each pixel in a set of samples is foreground by
-comparing it to the background color. A pixel is classified as a
-foreground pixel if either its value or saturation differs from the
-background by a threshold.'''
+    Args:
+        bg_color (numpy.ndarray): The background color.
+        samples (numpy.ndarray): The pixel samples.
+        options (argparse.Namespace): The command-line options.
+
+    Returns:
+        numpy.ndarray: The foreground mask.
+    """
 
     s_bg, v_bg = rgb_to_sv(bg_color)
     s_samples, v_samples = rgb_to_sv(samples)
@@ -352,19 +404,25 @@ background by a threshold.'''
 
 ######################################################################
 
-def get_fit(samples, options, return_mask=False):
+def get_fit(pixels, options, return_mask=False):
+    """
+    Extracts the palette for the set of sampled RGB values.
 
-    '''Extract the palette for the set of sampled RGB values. The first
-palette entry is always the background color; the rest are determined
-from foreground pixels by running K-means clustering. Returns the
-palette, as well as a mask corresponding to the foreground pixels.
+    Args:
+        pixels (numpy.ndarray): The RGB pixel values to be sampled.
+        options (argparse.Namespace): The command-line options.
+        return_mask (bool): Whether to return the foreground mask (default: False).
 
-    '''
+    Returns:
+        tuple: A tuple containing the color palette, background color, and optionally the foreground mask.
+    """
 
     if not options.quiet:
         print('  getting palette...')
 
-    bg_color = get_bg_color(samples, 6)
+    samples = sample_pixels(pixels, options)
+
+    bg_color = get_background_color(samples, 6)
 
     fg_mask = get_fg_mask(bg_color, samples, options)
 
@@ -374,8 +432,6 @@ palette, as well as a mask corresponding to the foreground pixels.
                      n_init='auto'
                     ).fit(samples[fg_mask])
 
-#     palette = np.vstack((bg_color, centers), dtype='uint8')
-
     if not return_mask:
         return fit, bg_color
     else:
@@ -383,14 +439,16 @@ palette, as well as a mask corresponding to the foreground pixels.
 
 ######################################################################
 
-def apply_palette(pixels, orig_shape, fit, bg_color, options):
+def apply_quantization(pixels, fit, bg_color, options):
+    """
+    Applies color quantization and background removal to the image.
 
-    '''Apply the pallete to the given image. The first step is to set all
-background pixels to the background color; then, nearest-neighbor
-matching is used to map each foreground color to the closest one in
-the palette.
-
-    '''
+    :param pixels (numpy.ndarray): The picture pixels
+    :param fit (sklearn.cluster._kmeans.KMeans): Trained prediction model
+    :param bg_color (numpy.ndarray): The background color
+    :param options (argparse.Namespace): Command line options.
+    :return: None
+    """
 
     if not options.quiet:
         print('  applying palette...')
@@ -405,21 +463,25 @@ the palette.
     # (0 corresp. to bg_color)
     labels[fg_mask_full] = fit.predict(pixels[fg_mask_full]) + 1
 
-    fit.cluster_centers_ = fit.cluster_centers_.round(0).astype('uint8')
-    palette = np.vstack((bg_color, fit.cluster_centers_))
+    fit.cluster_centers_ = fit.cluster_centers_.round(0)
+    palette = np.vstack((bg_color, fit.cluster_centers_.astype('uint8')))
 
     return labels, palette
 
 ######################################################################
 
 def save(output_filename, labels, palette, shape, dpi, options):
+    """
+    Saves the label/palette pair as an indexed PNG image.
 
-    '''Save the label/palette pair out as an indexed PNG image.  This
-optionally saturates the pallete by mapping the smallest color
-component to zero and the largest one to 255, and also optionally sets
-the background color to pure white.
-
-    '''
+    Args:
+        output_filename (str): The output filename.
+        labels (numpy.ndarray): The color labels.
+        palette (numpy.ndarray): The color palette.
+        shape (tuple): The image shape.
+        dpi (tuple): The image DPI (x, y).
+        options (argparse.Namespace): The command-line options.
+    """
 
     if not options.quiet:
         print('  saving {}...'.format(output_filename))
@@ -442,13 +504,16 @@ the background color to pure white.
 ######################################################################
 
 def get_global_fit(filenames, options):
+    """
+    Extracts the palette of a list of input files by sampling from all of them.
 
-    '''Fetch the global palette for a series of input files by merging
-their samples together into one large array.
+    Args:
+        filesnames (list): List of file names as strings
+        options (argparse.Namespace): The command-line options.
 
-    '''
-
-    input_filenames = []
+    Returns:
+        tuple: A tuple containing the color palette, background color, and optionally the foreground mask.
+    """
 
     all_samples = []
 
@@ -459,18 +524,13 @@ their samples together into one large array.
 
         pixels, _, _ = load(input_filename)
 
-        # skip images with loading error
-        if pixels is None:
-            continue
-
         if not options.quiet:
             print('  processing {}...'.format(input_filename))
 
         samples = sample_pixels(pixels, options)
-        input_filenames.append(input_filename)
         all_samples.append(samples)
 
-    num_inputs = len(input_filenames)
+    num_inputs = len(filenames)
 
     all_samples = [s[:int(round(float(s.shape[0])/num_inputs))]
                    for s in all_samples]
@@ -482,13 +542,18 @@ their samples together into one large array.
     if not options.quiet:
         print('  done\n')
 
-    return input_filenames, global_fit, bg_color
+    return global_fit, bg_color
 
 ######################################################################
 
 def emit_pdf(outputs, options):
+    '''
+    Runs the PDF conversion command to generate the PDF.
 
-    '''Runs the PDF conversion command to generate the PDF.'''
+    Args:
+        outputs (list): List of file names as strings
+        options (argparse.Namespace): The command-line options.
+    '''
 
     cmd = options.pdf_cmd
     cmd = cmd.replace('%o', options.pdfname)
@@ -515,25 +580,26 @@ def emit_pdf(outputs, options):
 ######################################################################
 
 def notescan_main(options):
+    """
+    Main function for the notescan program.
 
-    '''Main function for this program when run as script.'''
+    Args:
+        options (argparse.Namespace): The command-line options.
+    """
 
     filenames = get_filenames(options)
 
+    do_global = options.global_palette and len(filenames) > 1
+    do_postprocess = bool(options.postprocess_cmd)
+
     outputs = []
 
-    do_global = options.global_palette and len(filenames) > 1
-
     if do_global:
-        filenames, palette, bg_color = get_global_fit(filenames, options)
-
-    do_postprocess = bool(options.postprocess_cmd)
+        fit, bg_color = get_global_fit(filenames, options)
 
     for input_filename in filenames:
 
         pixels, dpi, shape = load(input_filename)
-        if pixels is None:
-            continue
 
         output_filename = '{}{:04d}.png'.format(
             options.basename, len(outputs))
@@ -542,10 +608,9 @@ def notescan_main(options):
             print('opened', input_filename)
 
         if not do_global:
-            samples = sample_pixels(pixels, options)
-            fit, bg_color = get_fit(samples, options)
+            fit, bg_color = get_fit(pixels, options)
 
-        labels, palette = apply_palette(pixels=pixels, orig_shape=shape, fit=fit, bg_color=bg_color, options=options)
+        labels, palette = apply_quantization(pixels=pixels, fit=fit, bg_color=bg_color, options=options)
 
         save(output_filename, labels, palette, shape, dpi, options)
 
