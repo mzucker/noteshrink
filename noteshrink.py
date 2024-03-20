@@ -22,6 +22,8 @@ import numpy as np
 from PIL import Image
 from sklearn.cluster import KMeans
 from sklearn.utils import shuffle
+from skimage.morphology import binary_opening, square
+from scipy.ndimage import median_filter
 
 ######################################################################
 
@@ -272,6 +274,18 @@ def get_argument_parser():
                         'use if you *really* want IMG_10.png to '
                         'precede IMG_2.png')
 
+    parser.add_argument('--denoise-median', default=False, action='store_true',
+                        help='Median filtering the output image with kernel size --denoise-median-strength.')
+
+    parser.add_argument('--denoise-opening', default=False, action='store_true',
+                        help='Perform opening (erosion followed by a dilation) of the binary background mask with kernel size --denoise-opening-strength. This replaces speckles with background.')
+
+    parser.add_argument('--denoise-median-strength', default=3, type=int,
+                        help='Denoising strength [1, 2, 3, ...]. Size of the filter kernel used.')
+
+    parser.add_argument('--denoise-opening-strength', default=3, type=int,
+                        help='Denoising strength [1, 2, 3, ...]. Size of the filter kernel used.')
+
     parser.add_argument('-P', dest='postprocess_cmd', default=None,
                         help='set postprocessing command (see -O, -C, -Q)')
 
@@ -439,7 +453,7 @@ def get_fit(pixels, options, return_mask=False):
 
 ######################################################################
 
-def apply_quantization(pixels, fit, bg_color, options):
+def apply_quantization(pixels, fit, bg_color, shape, options):
     """
     Applies color quantization and background removal to the image.
 
@@ -455,6 +469,10 @@ def apply_quantization(pixels, fit, bg_color, options):
 
     # get pixel mask with pixels corresp. to bg_color
     fg_mask_full = get_fg_mask(bg_color, pixels, options)
+
+    if options.denoise_opening:
+        ker = square(options.denoise_opening_strength)
+        fg_mask_full = binary_opening(fg_mask_full.reshape(shape[:-1]), ker).flatten()
 
     # init color-labels with 0 corresp. to bg_color
     labels = np.zeros(pixels.shape[0], dtype='uint8')
@@ -498,7 +516,14 @@ def save(output_filename, labels, palette, shape, dpi, options):
         palette[0] = (255, 255, 255)
 
 
-    output_img = Image.fromarray(palette[labels].reshape(shape), 'RGB')
+    if options.denoise_median:
+        # Median filtering is per color channel. In RGB space this would lead to color deviations.
+        output_img = Image.fromarray(palette[labels].reshape(shape)).convert('HSV')
+        output_img = median_filter(output_img, size=(options.denoise_median_strength, options.denoise_median_strength, 1))
+        output_img = Image.fromarray(output_img, 'HSV').convert('RGB')
+    else:
+        output_img = Image.fromarray(palette[labels].reshape(shape), 'RGB')
+
     output_img.save(output_filename, dpi=dpi)
 
 ######################################################################
@@ -610,7 +635,7 @@ def notescan_main(options):
         if not do_global:
             fit, bg_color = get_fit(pixels, options)
 
-        labels, palette = apply_quantization(pixels=pixels, fit=fit, bg_color=bg_color, options=options)
+        labels, palette = apply_quantization(pixels=pixels, fit=fit, bg_color=bg_color, shape=shape, options=options)
 
         save(output_filename, labels, palette, shape, dpi, options)
 
