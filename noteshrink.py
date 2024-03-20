@@ -16,7 +16,7 @@ import re
 import subprocess
 import shlex
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 import numpy as np
 from PIL import Image
@@ -221,9 +221,8 @@ def get_argument_parser():
     """
 
     parser = ArgumentParser(
+        formatter_class=ArgumentDefaultsHelpFormatter,
         description='convert scanned, hand-written notes to PDF')
-
-    show_default = ' (default %(default)s)'
 
     parser.add_argument('filenames', metavar='IMAGE', nargs='+',
                         help='files to convert')
@@ -234,29 +233,29 @@ def get_argument_parser():
 
     parser.add_argument('-b', dest='basename', metavar='BASENAME',
                         default='page',
-                        help='output PNG filename base' + show_default)
+                        help='output PNG filename base')
 
     parser.add_argument('-o', dest='pdfname', metavar='PDF',
                         default='output.pdf',
-                        help='output PDF filename' + show_default)
+                        help='output PDF filename')
 
     parser.add_argument('-v', dest='value_threshold', metavar='PERCENT',
                         type=percent, default='25',
-                        help='background value threshold %%'+show_default)
+                        help='background value threshold %%')
 
     parser.add_argument('-s', dest='sat_threshold', metavar='PERCENT',
                         type=percent, default='15',
                         help='background saturation '
-                        'threshold %%'+show_default)
+                        'threshold %%')
 
     parser.add_argument('-n', dest='num_colors', type=int,
                         default='8',
-                        help='number of output colors '+show_default)
+                        help='number of output colors')
 
     parser.add_argument('-p', dest='sample_fraction',
                         metavar='PERCENT',
                         type=percent, default='5',
-                        help='%% of pixels to sample' + show_default)
+                        help='%% of pixels to sample')
 
     parser.add_argument('-w', dest='white_bg', action='store_true',
                         default=False, help='make background white')
