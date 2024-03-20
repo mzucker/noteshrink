@@ -20,11 +20,12 @@ from argparse import ArgumentParser
 
 import numpy as np
 from PIL import Image
-from scipy.cluster.vq import kmeans, vq
+from sklearn.cluster import KMeans
+from sklearn.utils import shuffle
 
 ######################################################################
 
-def quantize(image, bits_per_channel=None):
+def quantize(image, bits_per_channel=6):
 
     '''Reduces the number of bits per channel in the given image.'''
 
@@ -34,9 +35,10 @@ def quantize(image, bits_per_channel=None):
     assert image.dtype == np.uint8
 
     shift = 8-bits_per_channel
-    halfbin = (1 << shift) >> 1
+    halfbin = 2**(shift - 1)
 
-    return ((image.astype(int) >> shift) << shift) + halfbin
+    # Truncate last shift bits and add half the clipped bin
+    return (np.left_shift(np.right_shift(image, shift), shift) + halfbin).astype('uint8')
 
 ######################################################################
 
@@ -49,21 +51,16 @@ works on both arrays and tuples.'''
 
     if isinstance(rgb, np.ndarray):
         assert rgb.shape[-1] == 3
-        orig_shape = rgb.shape[:-1]
+        rgb = rgb.astype(np.uint32)
     else:
         assert len(rgb) == 3
-        rgb = np.array(rgb)
-
-    rgb = rgb.astype(int).reshape((-1, 3))
+        rgb = np.array(rgb, dtype=np.uint32)
 
     packed = (rgb[:, 0] << 16 |
               rgb[:, 1] << 8 |
               rgb[:, 2])
 
-    if orig_shape is None:
-        return packed
-    else:
-        return packed.reshape(orig_shape)
+    return packed
 
 ######################################################################
 
@@ -74,25 +71,18 @@ def unpack_rgb(packed):
 
     '''
 
-    orig_shape = None
-
-    if isinstance(packed, np.ndarray):
-        assert packed.dtype == int
-        orig_shape = packed.shape
-        packed = packed.reshape((-1, 1))
+#     if isinstance(packed, np.ndarray):
+#         packed = packed.reshape((-1, 1))
 
     rgb = ((packed >> 16) & 0xff,
            (packed >> 8) & 0xff,
            (packed) & 0xff)
 
-    if orig_shape is None:
-        return rgb
-    else:
-        return np.hstack(rgb).reshape(orig_shape + (3,))
+    return np.array(rgb, dtype='uint8').T
 
 ######################################################################
 
-def get_bg_color(image, bits_per_channel=None):
+def get_bg_color(pixels, bits_per_channel=6):
 
     '''Obtains the background color from an image or array of RGB colors
 by grouping similar colors into bins and finding the most frequent
@@ -100,9 +90,9 @@ one.
 
     '''
 
-    assert image.shape[-1] == 3
+    assert pixels.shape[-1] == 3
 
-    quantized = quantize(image, bits_per_channel).astype(int)
+    quantized = quantize(pixels, bits_per_channel).astype(np.uint32)
     packed = pack_rgb(quantized)
 
     unique, counts = np.unique(packed, return_counts=True)
@@ -124,13 +114,11 @@ value.
     if not isinstance(rgb, np.ndarray):
         rgb = np.array(rgb)
 
-    axis = len(rgb.shape)-1
-    cmax = rgb.max(axis=axis).astype(np.float32)
-    cmin = rgb.min(axis=axis).astype(np.float32)
-    delta = cmax - cmin
+    rgb = rgb.reshape((-1,3))
 
-    saturation = delta.astype(np.float32) / cmax.astype(np.float32)
-    saturation = np.where(cmax == 0, 0, saturation)
+    cmax = rgb.max(axis=1)
+    # Replace 0/0 values
+    saturation = np.nan_to_num(1 - rgb.min(axis=1) / cmax)
 
     value = cmax/255.0
 
@@ -310,8 +298,8 @@ pages ordered correctly.
 
 def load(input_filename):
 
-    '''Load an image with Pillow and convert it to numpy array. Also
-returns the image DPI in x and y as a tuple.'''
+    '''Load an image with Pillow and convert it to numpy pixel-array. Also
+returns the image DPI in x and y as a tuple as well as the image shape.'''
 
     try:
         pil_img = Image.open(input_filename)
@@ -330,23 +318,19 @@ returns the image DPI in x and y as a tuple.'''
 
     img = np.array(pil_img)
 
-    return img, dpi
+    return img.reshape((-1, img.shape[-1])), dpi, img.shape
 
 ######################################################################
 
-def sample_pixels(img, options):
+def sample_pixels(pixels, options):
 
     '''Pick a fixed percentage of pixels in the image, returned in random
 order.'''
 
-    pixels = img.reshape((-1, 3))
     num_pixels = pixels.shape[0]
-    num_samples = int(num_pixels*options.sample_fraction)
+    num_samples = int(round(num_pixels*options.sample_fraction, 0))
 
-    idx = np.arange(num_pixels)
-    np.random.shuffle(idx)
-
-    return pixels[idx[:num_samples]]
+    return shuffle(pixels, random_state=0, n_samples=num_samples)
 
 ######################################################################
 
@@ -368,7 +352,7 @@ background by a threshold.'''
 
 ######################################################################
 
-def get_palette(samples, options, return_mask=False, kmeans_iter=40):
+def get_fit(samples, options, return_mask=False):
 
     '''Extract the palette for the set of sampled RGB values. The first
 palette entry is always the background color; the rest are determined
@@ -384,20 +368,22 @@ palette, as well as a mask corresponding to the foreground pixels.
 
     fg_mask = get_fg_mask(bg_color, samples, options)
 
-    centers, _ = kmeans(samples[fg_mask].astype(np.float32),
-                        options.num_colors-1,
-                        iter=kmeans_iter)
+    # Fit model to data sample
+    fit = KMeans(n_clusters=options.num_colors-1,
+                     random_state=0,
+                     n_init='auto'
+                    ).fit(samples[fg_mask])
 
-    palette = np.vstack((bg_color, centers)).astype(np.uint8)
+#     palette = np.vstack((bg_color, centers), dtype='uint8')
 
     if not return_mask:
-        return palette
+        return fit, bg_color
     else:
-        return palette, fg_mask
+        return fit, bg_color, fg_mask
 
 ######################################################################
 
-def apply_palette(img, palette, options):
+def apply_palette(pixels, orig_shape, fit, bg_color, options):
 
     '''Apply the pallete to the given image. The first step is to set all
 background pixels to the background color; then, nearest-neighbor
@@ -409,26 +395,24 @@ the palette.
     if not options.quiet:
         print('  applying palette...')
 
-    bg_color = palette[0]
+    # get pixel mask with pixels corresp. to bg_color
+    fg_mask_full = get_fg_mask(bg_color, pixels, options)
 
-    fg_mask = get_fg_mask(bg_color, img, options)
+    # init color-labels with 0 corresp. to bg_color
+    labels = np.zeros(pixels.shape[0], dtype='uint8')
 
-    orig_shape = img.shape
+    # predict non-bg_color pixels to color-labels
+    # (0 corresp. to bg_color)
+    labels[fg_mask_full] = fit.predict(pixels[fg_mask_full]) + 1
 
-    pixels = img.reshape((-1, 3))
-    fg_mask = fg_mask.flatten()
+    fit.cluster_centers_ = fit.cluster_centers_.round(0).astype('uint8')
+    palette = np.vstack((bg_color, fit.cluster_centers_))
 
-    num_pixels = pixels.shape[0]
-
-    labels = np.zeros(num_pixels, dtype=np.uint8)
-
-    labels[fg_mask], _ = vq(pixels[fg_mask], palette)
-
-    return labels.reshape(orig_shape[:-1])
+    return labels, palette
 
 ######################################################################
 
-def save(output_filename, labels, palette, dpi, options):
+def save(output_filename, labels, palette, shape, dpi, options):
 
     '''Save the label/palette pair out as an indexed PNG image.  This
 optionally saturates the pallete by mapping the smallest color
@@ -445,19 +429,19 @@ the background color to pure white.
         pmin = palette.min()
         pmax = palette.max()
         palette = 255 * (palette - pmin)/(pmax-pmin)
-        palette = palette.astype(np.uint8)
+        palette = palette.round(0).astype(np.uint8)
 
     if options.white_bg:
         palette = palette.copy()
         palette[0] = (255, 255, 255)
 
-    output_img = Image.fromarray(labels, 'P')
-    output_img.putpalette(palette.flatten())
+
+    output_img = Image.fromarray(palette[labels].reshape(shape), 'RGB')
     output_img.save(output_filename, dpi=dpi)
 
 ######################################################################
 
-def get_global_palette(filenames, options):
+def get_global_fit(filenames, options):
 
     '''Fetch the global palette for a series of input files by merging
 their samples together into one large array.
@@ -473,14 +457,16 @@ their samples together into one large array.
 
     for input_filename in filenames:
 
-        img, _ = load(input_filename)
-        if img is None:
+        pixels, _, _ = load(input_filename)
+
+        # skip images with loading error
+        if pixels is None:
             continue
 
         if not options.quiet:
             print('  processing {}...'.format(input_filename))
 
-        samples = sample_pixels(img, options)
+        samples = sample_pixels(pixels, options)
         input_filenames.append(input_filename)
         all_samples.append(samples)
 
@@ -489,14 +475,14 @@ their samples together into one large array.
     all_samples = [s[:int(round(float(s.shape[0])/num_inputs))]
                    for s in all_samples]
 
-    all_samples = np.vstack(tuple(all_samples))
+    all_samples = np.vstack(tuple(all_samples)).astype('uint8')
 
-    global_palette = get_palette(all_samples, options)
+    global_fit, bg_color = get_fit(all_samples, options, return_mask=False)
 
     if not options.quiet:
         print('  done\n')
 
-    return input_filenames, global_palette
+    return input_filenames, global_fit, bg_color
 
 ######################################################################
 
@@ -539,14 +525,14 @@ def notescan_main(options):
     do_global = options.global_palette and len(filenames) > 1
 
     if do_global:
-        filenames, palette = get_global_palette(filenames, options)
+        filenames, palette, bg_color = get_global_fit(filenames, options)
 
     do_postprocess = bool(options.postprocess_cmd)
 
     for input_filename in filenames:
 
-        img, dpi = load(input_filename)
-        if img is None:
+        pixels, dpi, shape = load(input_filename)
+        if pixels is None:
             continue
 
         output_filename = '{}{:04d}.png'.format(
@@ -556,12 +542,12 @@ def notescan_main(options):
             print('opened', input_filename)
 
         if not do_global:
-            samples = sample_pixels(img, options)
-            palette = get_palette(samples, options)
+            samples = sample_pixels(pixels, options)
+            fit, bg_color = get_fit(samples, options)
 
-        labels = apply_palette(img, palette, options)
+        labels, palette = apply_palette(pixels=pixels, orig_shape=shape, fit=fit, bg_color=bg_color, options=options)
 
-        save(output_filename, labels, palette, dpi, options)
+        save(output_filename, labels, palette, shape, dpi, options)
 
         if do_postprocess:
             post_filename = postprocess(output_filename, options)
