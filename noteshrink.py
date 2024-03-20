@@ -243,7 +243,7 @@ def get_argument_parser():
                         help='background value threshold %%'+show_default)
 
     parser.add_argument('-s', dest='sat_threshold', metavar='PERCENT',
-                        type=percent, default='20',
+                        type=percent, default='15',
                         help='background saturation '
                         'threshold %%'+show_default)
 
